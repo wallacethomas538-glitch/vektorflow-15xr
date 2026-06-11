@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VektorFlow 15xr | AI E-Commerce Intelligence</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #0f0c29, #302b63, #24243e);
+            min-height: 100vh;
+            color: white;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 2rem;
+        }
+        h1 {
+            font-size: 3rem;
+            margin-bottom: 0.5rem;
+            background: linear-gradient(135deg, #00d2ff, #3a7bd5);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        .subtitle {
+            color: #aaa;
+            margin-bottom: 2rem;
+        }
+        .status-badge {
+            display: inline-block;
+            background: #10b981;
+            color: white;
+            padding: 0.25rem 0.75rem;
+            border-radius: 20px;
+            font-size: 0.8rem;
+            margin-bottom: 2rem;
+        }
+        .card {
+            background: rgba(255,255,255,0.1);
+            border-radius: 16px;
+            padding: 1.5rem;
+            margin-bottom: 1.5rem;
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255,255,255,0.2);
+        }
+        .card h2 {
+            margin-bottom: 1rem;
+            font-size: 1.5rem;
+        }
+        .endpoint {
+            background: rgba(0,0,0,0.4);
+            padding: 0.75rem;
+            border-radius: 8px;
+            font-family: monospace;
+            margin: 0.5rem 0;
+            word-break: break-all;
+        }
+        .method {
+            display: inline-block;
+            background: #3b82f6;
+            padding: 0.2rem 0.5rem;
+            border-radius: 4px;
+            font-size: 0.7rem;
+            margin-right: 0.5rem;
+        }
+        input, textarea {
+            width: 100%;
+            padding: 0.75rem;
+            margin: 0.5rem 0;
+            border-radius: 8px;
+            border: none;
+            background: rgba(255,255,255,0.1);
+            color: white;
+            font-family: monospace;
+        }
+        button {
+            background: #3b82f6;
+            color: white;
+            border: none;
+            padding: 0.75rem 1.5rem;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 1rem;
+        }
+        button:hover {
+            background: #2563eb;
+        }
+        pre {
+            background: rgba(0,0,0,0.5);
+            padding: 1rem;
+            border-radius: 8px;
+            overflow-x: auto;
+            font-size: 0.8rem;
+        }
+        .feature-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 1rem;
+            margin-top: 1rem;
+        }
+        .feature {
+            background: rgba(255,255,255,0.05);
+            padding: 1rem;
+            border-radius: 8px;
+        }
+        footer {
+            text-align: center;
+            margin-top: 3rem;
+            padding-top: 2rem;
+            border-top: 1px solid rgba(255,255,255,0.1);
+            color: #666;
+        }
+        @media (max-width: 768px) {
+            .container { padding: 1rem; }
+            h1 { font-size: 2rem; }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <span class="status-badge" id="statusBadge">🟢 Checking status...</span>
+        <h1>VektorFlow 15xr</h1>
+        <div class="subtitle">15 AI Agents | Memory Fabric | E-Commerce Intelligence</div>
+
+        <div class="card">
+            <h2>📊 System Status</h2>
+            <div id="systemStatus">Loading...</div>
+        </div>
+
+        <div class="card">
+            <h2>🚀 How to Use This Demo</h2>
+            <ol style="margin-left: 1.5rem; line-height: 1.8;">
+                <li><strong>Upload your catalog</strong> — Send a POST request to <code>/ecommerce/catalog</code> with your products (CSV or JSON)</li>
+                <li><strong>Find trending products</strong> — GET <code>/ecommerce/trends/{store_id}</code> to see viral trends matched to YOUR inventory</li>
+                <li><strong>Generate campaigns</strong> — GET <code>/ecommerce/campaign/{store_id}/{product_name}</code> for ready-to-post DM sequences</li>
+                <li><strong>Get weekly reports</strong> — GET <code>/ecommerce/weekly-report/{store_id}</code> for hands-off intelligence</li>
+                <li><strong>Optimize for AI</strong> — GET <code>/ecommerce/citation/{store_id}/{product_name}</code> to see how ChatGPT will rate your product</li>
+            </ol>
+        </div>
+
+        <div class="card">
+            <h2>🧪 Try It Right Now</h2>
+            <p style="margin-bottom: 0.5rem;">Test the API directly:</p>
+            <div class="endpoint">
+                <span class="method">GET</span> /health
+            </div>
+            <button onclick="testHealth()">Test Health Endpoint</button>
+            <pre id="testResult">Click the button to test...</pre>
+        </div>
+
+        <div class="card">
+            <h2>✨ Features</h2>
+            <div class="feature-grid">
+                <div class="feature">🧠 Three-Tier Memory Fabric</div>
+                <div class="feature">🤝 Cognition Sharing Between Agents</div>
+                <div class="feature">🔄 Interference Merge Pattern</div>
+                <div class="feature">💰 Free-Tier LLM Routing</div>
+                <div class="feature">📈 Trend-to-Catalog Mapping</div>
+                <div class="feature">🤖 AI Citation Optimization</div>
+                <div class="feature">💬 Click-to-Message Campaigns</div>
+                <div class="feature">📊 Weekly Intelligence Reports</div>
+            </div>
+        </div>
+
+        <footer>
+            VektorFlow 15xr — Proprietary. Demo access only. <br>
+            For commercial licensing, contact the Commander.
+        </footer>
+    </div>
+
+    <script>
+        // Get the base URL dynamically
+        const BASE_URL = window.location.origin;
+
+        // Check system status on load
+        async function checkStatus() {
+            try {
+                const response = await fetch(`${BASE_URL}/`);
+                const data = await response.json();
+                document.getElementById('statusBadge').innerHTML = '🟢 SYSTEM ONLINE';
+                document.getElementById('systemStatus').innerHTML = `
+                    <p><strong>System:</strong> ${data.system}</p>
+                    <p><strong>Version:</strong> ${data.version}</p>
+                    <p><strong>Agents Ready:</strong> ${data.agents_ready}</p>
+                    <p><strong>Features:</strong> ${data.features.join(', ')}</p>
+                `;
+            } catch (error) {
+                document.getElementById('statusBadge').innerHTML = '🔴 OFFLINE';
+                document.getElementById('systemStatus').innerHTML = '<p>Unable to connect to API. Make sure the server is running.</p>';
+            }
+        }
+
+        // Test health endpoint
+        async function testHealth() {
+            const resultElement = document.getElementById('testResult');
+            resultElement.textContent = 'Fetching...';
+            try {
+                const response = await fetch(`${BASE_URL}/health`);
+                const data = await response.json();
+                resultElement.textContent = JSON.stringify(data, null, 2);
+            } catch (error) {
+                resultElement.textContent = `Error: ${error.message}`;
+            }
+        }
+
+        // Load status on page load
+        checkStatus();
+    </script>
+</body>
+</html>
