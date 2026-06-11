@@ -1,15 +1,10 @@
-"""
-VektorFlow 15xr - Main Entry Point
-15 agents. Memory fabric. Cognition sharing. E-commerce intelligence.
-"""
-from fastapi.responses import FileResponse
 from fastapi import FastAPI, HTTPException, Header
+from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from typing import Optional, Dict, Any, List
 import os
 from datetime import datetime
-from fastapi.staticfiles import StaticFiles
-# Import all modules
+
 from memory_fabric import MemoryFabric
 from agent_with_memory import VektorAgent
 from kill_switch import KillSwitch
@@ -26,12 +21,9 @@ from weekly_report_generator import WeeklyReportGenerator
 
 app = FastAPI(title="VektorFlow 15xr", description="15 agents with memory fabric + e-commerce intelligence")
 
-# Active agents storage
 agents: Dict[str, VektorAgent] = {}
 kill_switch = KillSwitch()
 memory = MemoryFabric()
-
-# ========== CORE AGENT ENDPOINTS ==========
 
 class TaskRequest(BaseModel):
     agent_id: str
@@ -45,25 +37,10 @@ class CatalogUpdate(BaseModel):
 @app.get("/")
 def root():
     return FileResponse("static/index.html")
-        "status": "online",
-        "system": "VektorFlow 15xr",
-        "version": "2.0",
-        "agents_ready": 15,
-        "features": [
-            "Three-tier memory fabric",
-            "Cognition sharing",
-            "Interference merge",
-            "Free-tier LLM routing",
-            "Trend-to-catalog mapping",
-            "AI citation optimization",
-            "Click-to-message campaigns",
-            "Weekly intelligence reports"
-        ]
-    }
 
 @app.get("/health")
 def health():
-    return {"status": "healthy", "timestamp": datetime.utcnow().isoformat()}
+    return {"status": "healthy", "timestamp": datetime.now().isoformat()}
 
 @app.post("/agent/register")
 def register_agent(agent_id: str):
@@ -86,8 +63,6 @@ def run_agent(request: TaskRequest):
 def list_agents():
     return {"agents": list(agents.keys()), "count": len(agents)}
 
-# ========== ADMIN ENDPOINTS ==========
-
 @app.post("/admin/kill/{agent_id}")
 def kill_agent(agent_id: str, x_admin_key: str = Header(...)):
     if x_admin_key != os.environ.get("ADMIN_API_KEY", "change_me"):
@@ -102,8 +77,6 @@ def revive_agent(agent_id: str, x_admin_key: str = Header(...)):
     kill_switch.revive(agent_id)
     return {"status": "revived", "agent_id": agent_id}
 
-# ========== MEMORY ENDPOINTS ==========
-
 @app.get("/memory/{agent_id}")
 def get_agent_memory(agent_id: str, limit: int = 50):
     episodes = memory.get_episodes(agent_id, limit)
@@ -113,9 +86,6 @@ def get_agent_memory(agent_id: str, limit: int = 50):
 def get_shared_context():
     return memory.get_all_shared_context()
 
-# ========== E-COMMERCE ENDPOINTS ==========
-
-# Store catalogs in memory (in production, use DB)
 catalogs = {}
 
 @app.post("/ecommerce/catalog")
@@ -127,7 +97,7 @@ def upload_catalog(data: CatalogUpdate):
 @app.get("/ecommerce/trends/{store_id}")
 def get_trending_matches(store_id: str):
     if store_id not in catalogs:
-        raise HTTPException(404, "No catalog found. Upload catalog first.")
+        raise HTTPException(404, "No catalog found")
     mapper = TrendToCatalogMapper(catalogs[store_id])
     result = mapper.run_weekly()
     mapper.close()
@@ -137,11 +107,9 @@ def get_trending_matches(store_id: str):
 def get_citation_score(store_id: str, product_name: str):
     if store_id not in catalogs:
         raise HTTPException(404, "No catalog found")
-    
     product = next((p for p in catalogs[store_id] if p.get("name", "").lower() == product_name.lower()), None)
     if not product:
-        raise HTTPException(404, f"Product '{product_name}' not found")
-    
+        raise HTTPException(404, "Product not found")
     optimizer = AICitationOptimizer()
     return optimizer.calculate_citation_score(product)
 
@@ -149,26 +117,18 @@ def get_citation_score(store_id: str, product_name: str):
 def generate_campaign(store_id: str, product_name: str, trend: Optional[str] = None):
     if store_id not in catalogs:
         raise HTTPException(404, "No catalog found")
-    
     product = next((p for p in catalogs[store_id] if p.get("name", "").lower() == product_name.lower()), None)
     if not product:
-        raise HTTPException(404, f"Product '{product_name}' not found")
-    
+        raise HTTPException(404, "Product not found")
     builder = ClickToMessageBuilder()
     sequence = builder.generate_sequence(product, trend)
     ad_copy = builder.generate_ad_copy(product, trend)
-    
-    return {
-        "product": product.get("name"),
-        "sequence": sequence,
-        "ad_copy": ad_copy
-    }
+    return {"product": product.get("name"), "sequence": sequence, "ad_copy": ad_copy}
 
 @app.get("/ecommerce/weekly-report/{store_id}")
 def get_weekly_report(store_id: str):
     if store_id not in catalogs:
         raise HTTPException(404, "No catalog found")
-    
     generator = WeeklyReportGenerator(catalogs[store_id])
     report = generator.generate_full_report()
     generator.close()
@@ -178,17 +138,14 @@ def get_weekly_report(store_id: str):
 def export_social_csv(store_id: str, platform: str = "tiktok"):
     if store_id not in catalogs:
         raise HTTPException(404, "No catalog found")
-    
     connector = SocialCommerceConnector()
     if platform == "tiktok":
         csv_data = connector.generate_tiktok_shop_csv(catalogs[store_id])
-        return {"csv": csv_data, "format": "csv", "platform": "TikTok Shop"}
+        return {"csv": csv_data, "format": "csv"}
     elif platform == "instagram":
         return connector.generate_instagram_product_tags(catalogs[store_id])
     else:
         raise HTTPException(400, "Platform must be 'tiktok' or 'instagram'")
-
-# ========== LLM ROUTING ENDPOINT ==========
 
 class LLMRequest(BaseModel):
     prompt: str
@@ -200,8 +157,6 @@ async def call_llm(request: LLMRequest):
     result = await router.call(request.prompt, request.fallback)
     return result
 
-# ========== INTERFERENCE MERGE ENDPOINT ==========
-
 class MergeRequest(BaseModel):
     responses: List[Dict[str, Any]]
 
@@ -209,8 +164,6 @@ class MergeRequest(BaseModel):
 def merge_responses(request: MergeRequest):
     result = InterferenceMerge.merge(request.responses)
     return result
-
-# ========== PATTERN DETECTION ENDPOINT ==========
 
 class PatternRequest(BaseModel):
     events: List[Dict[str, Any]]
@@ -223,4 +176,3 @@ def detect_pattern(request: PatternRequest):
         operator.add_event(event)
     detected = operator.detect_pattern(request.pattern)
     return {"pattern": request.pattern, "detected": detected}
-app.mount("/", StaticFiles(directory="static", html=True), name="static")
