@@ -3,81 +3,42 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>VektorFlow 15xr | AI E-Commerce Intelligence</title>
+    <title>VektorFlow 15xr | AI E-Commerce Dashboard</title>
     <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            font-family: system-ui, -apple-system, sans-serif;
             background: linear-gradient(135deg, #0f0c29, #302b63, #24243e);
             min-height: 100vh;
             color: white;
+            padding: 1rem;
         }
-        .container {
-            max-width: 1200px;
-            margin: 0 auto;
-            padding: 2rem;
-        }
-        h1 {
-            font-size: 3rem;
-            margin-bottom: 0.5rem;
-            background: linear-gradient(135deg, #00d2ff, #3a7bd5);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-        }
-        .subtitle {
-            color: #aaa;
-            margin-bottom: 2rem;
-        }
-        .status-badge {
+        .container { max-width: 800px; margin: 0 auto; }
+        h1 { font-size: 2rem; margin-bottom: 0.5rem; }
+        .status {
             display: inline-block;
-            background: #10b981;
-            color: white;
             padding: 0.25rem 0.75rem;
             border-radius: 20px;
             font-size: 0.8rem;
-            margin-bottom: 2rem;
+            margin-bottom: 1rem;
         }
+        .status.online { background: #10b981; }
+        .status.offline { background: #ef4444; }
         .card {
             background: rgba(255,255,255,0.1);
             border-radius: 16px;
-            padding: 1.5rem;
-            margin-bottom: 1.5rem;
-            backdrop-filter: blur(10px);
-            border: 1px solid rgba(255,255,255,0.2);
-        }
-        .card h2 {
+            padding: 1.25rem;
             margin-bottom: 1rem;
-            font-size: 1.5rem;
+            backdrop-filter: blur(10px);
         }
-        .endpoint {
-            background: rgba(0,0,0,0.4);
-            padding: 0.75rem;
-            border-radius: 8px;
-            font-family: monospace;
-            margin: 0.5rem 0;
-            word-break: break-all;
-        }
-        .method {
-            display: inline-block;
-            background: #3b82f6;
-            padding: 0.2rem 0.5rem;
-            border-radius: 4px;
-            font-size: 0.7rem;
-            margin-right: 0.5rem;
-        }
-        input, textarea {
+        input, textarea, select {
             width: 100%;
             padding: 0.75rem;
             margin: 0.5rem 0;
             border-radius: 8px;
             border: none;
-            background: rgba(255,255,255,0.1);
+            background: rgba(255,255,255,0.15);
             color: white;
-            font-family: monospace;
         }
         button {
             background: #3b82f6;
@@ -85,132 +46,283 @@
             border: none;
             padding: 0.75rem 1.5rem;
             border-radius: 8px;
-            cursor: pointer;
             font-size: 1rem;
+            margin: 0.25rem;
+            cursor: pointer;
         }
-        button:hover {
-            background: #2563eb;
-        }
+        button:active { transform: scale(0.98); }
         pre {
             background: rgba(0,0,0,0.5);
             padding: 1rem;
             border-radius: 8px;
             overflow-x: auto;
-            font-size: 0.8rem;
+            font-size: 0.75rem;
+            margin-top: 0.5rem;
+            white-space: pre-wrap;
+            word-break: break-word;
         }
-        .feature-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-            gap: 1rem;
-            margin-top: 1rem;
-        }
-        .feature {
-            background: rgba(255,255,255,0.05);
-            padding: 1rem;
+        .result { margin-top: 1rem; }
+        .loading { opacity: 0.5; pointer-events: none; }
+        .flex-row { display: flex; gap: 0.5rem; flex-wrap: wrap; }
+        .store-id {
+            background: #1e1b4b;
+            padding: 0.5rem;
             border-radius: 8px;
+            font-family: monospace;
+            margin-bottom: 1rem;
         }
-        footer {
-            text-align: center;
-            margin-top: 3rem;
-            padding-top: 2rem;
-            border-top: 1px solid rgba(255,255,255,0.1);
-            color: #666;
-        }
-        @media (max-width: 768px) {
-            .container { padding: 1rem; }
-            h1 { font-size: 2rem; }
+        hr { margin: 1rem 0; border-color: rgba(255,255,255,0.1); }
+        .product-item {
+            background: rgba(255,255,255,0.05);
+            padding: 0.5rem;
+            margin: 0.5rem 0;
+            border-radius: 8px;
         }
     </style>
 </head>
 <body>
-    <div class="container">
-        <span class="status-badge" id="statusBadge">🟢 Checking status...</span>
-        <h1>VektorFlow 15xr</h1>
-        <div class="subtitle">15 AI Agents | Memory Fabric | E-Commerce Intelligence</div>
+<div class="container">
+    <h1>⚡ VektorFlow 15xr</h1>
+    <div id="statusBadge" class="status offline">● Checking...</div>
 
-        <div class="card">
-            <h2>📊 System Status</h2>
-            <div id="systemStatus">Loading...</div>
-        </div>
-
-        <div class="card">
-            <h2>🚀 How to Use This Demo</h2>
-            <ol style="margin-left: 1.5rem; line-height: 1.8;">
-                <li><strong>Upload your catalog</strong> — Send a POST request to <code>/ecommerce/catalog</code> with your products (CSV or JSON)</li>
-                <li><strong>Find trending products</strong> — GET <code>/ecommerce/trends/{store_id}</code> to see viral trends matched to YOUR inventory</li>
-                <li><strong>Generate campaigns</strong> — GET <code>/ecommerce/campaign/{store_id}/{product_name}</code> for ready-to-post DM sequences</li>
-                <li><strong>Get weekly reports</strong> — GET <code>/ecommerce/weekly-report/{store_id}</code> for hands-off intelligence</li>
-                <li><strong>Optimize for AI</strong> — GET <code>/ecommerce/citation/{store_id}/{product_name}</code> to see how ChatGPT will rate your product</li>
-            </ol>
-        </div>
-
-        <div class="card">
-            <h2>🧪 Try It Right Now</h2>
-            <p style="margin-bottom: 0.5rem;">Test the API directly:</p>
-            <div class="endpoint">
-                <span class="method">GET</span> /health
-            </div>
-            <button onclick="testHealth()">Test Health Endpoint</button>
-            <pre id="testResult">Click the button to test...</pre>
-        </div>
-
-        <div class="card">
-            <h2>✨ Features</h2>
-            <div class="feature-grid">
-                <div class="feature">🧠 Three-Tier Memory Fabric</div>
-                <div class="feature">🤝 Cognition Sharing Between Agents</div>
-                <div class="feature">🔄 Interference Merge Pattern</div>
-                <div class="feature">💰 Free-Tier LLM Routing</div>
-                <div class="feature">📈 Trend-to-Catalog Mapping</div>
-                <div class="feature">🤖 AI Citation Optimization</div>
-                <div class="feature">💬 Click-to-Message Campaigns</div>
-                <div class="feature">📊 Weekly Intelligence Reports</div>
-            </div>
-        </div>
-
-        <footer>
-            VektorFlow 15xr — Proprietary. Demo access only. <br>
-            For commercial licensing, contact the Commander.
-        </footer>
+    <!-- Store ID -->
+    <div class="card">
+        <h3>🏪 Your Store ID</h3>
+        <input type="text" id="storeId" placeholder="my-shopify-store" value="test-store">
+        <p style="font-size: 0.75rem; opacity: 0.7;">Use this ID to identify your catalog</p>
     </div>
 
-    <script>
-        // Get the base URL dynamically
-        const BASE_URL = window.location.origin;
+    <!-- Upload Catalog -->
+    <div class="card">
+        <h3>📦 1. Upload Your Product Catalog</h3>
+        <input type="file" id="catalogFile" accept=".json">
+        <button id="uploadBtn">⬆️ Upload Catalog</button>
+        <div id="uploadResult" class="result"></div>
+    </div>
 
-        // Check system status on load
-        async function checkStatus() {
-            try {
-                const response = await fetch(`${BASE_URL}/`);
-                const data = await response.json();
-                document.getElementById('statusBadge').innerHTML = '🟢 SYSTEM ONLINE';
-                document.getElementById('systemStatus').innerHTML = `
-                    <p><strong>System:</strong> ${data.system}</p>
-                    <p><strong>Version:</strong> ${data.version}</p>
-                    <p><strong>Agents Ready:</strong> ${data.agents_ready}</p>
-                    <p><strong>Features:</strong> ${data.features.join(', ')}</p>
-                `;
-            } catch (error) {
-                document.getElementById('statusBadge').innerHTML = '🔴 OFFLINE';
-                document.getElementById('systemStatus').innerHTML = '<p>Unable to connect to API. Make sure the server is running.</p>';
-            }
+    <!-- Get Trends -->
+    <div class="card">
+        <h3>🔥 2. Find Trending Products</h3>
+        <button id="trendsBtn">📈 Get Trends for My Store</button>
+        <div id="trendsResult" class="result"></div>
+    </div>
+
+    <!-- Generate Campaign -->
+    <div class="card">
+        <h3>📱 3. Generate Click-to-Message Campaign</h3>
+        <input type="text" id="productName" placeholder="Product name (exactly as in catalog)">
+        <input type="text" id="trendKeyword" placeholder="Trend keyword (optional)">
+        <button id="campaignBtn">💬 Generate Campaign</button>
+        <div id="campaignResult" class="result"></div>
+    </div>
+
+    <!-- AI Citation Score -->
+    <div class="card">
+        <h3>🤖 4. AI Citation Score</h3>
+        <input type="text" id="citationProduct" placeholder="Product name">
+        <button id="citationBtn">📊 Get AI Score</button>
+        <div id="citationResult" class="result"></div>
+    </div>
+
+    <!-- Weekly Report -->
+    <div class="card">
+        <h3>📊 5. Weekly Intelligence Report</h3>
+        <button id="reportBtn">📋 Generate Weekly Report</button>
+        <div id="reportResult" class="result"></div>
+    </div>
+
+    <!-- Direct LLM Call -->
+    <div class="card">
+        <h3>🧠 6. Direct LLM Call (Groq)</h3>
+        <textarea id="llmPrompt" rows="2" placeholder="Ask something... e.g. Write a TikTok caption for wireless earbuds"></textarea>
+        <button id="llmBtn">🤖 Call AI</button>
+        <div id="llmResult" class="result"></div>
+    </div>
+</div>
+
+<script>
+    const BASE = window.location.origin;
+    let currentStoreId = localStorage.getItem('storeId') || 'test-store';
+
+    // DOM elements
+    const storeIdInput = document.getElementById('storeId');
+    const statusBadge = document.getElementById('statusBadge');
+    
+    // Helper
+    function setLoading(btnId, isLoading) {
+        const btn = document.getElementById(btnId);
+        if (btn) {
+            if (isLoading) btn.classList.add('loading');
+            else btn.classList.remove('loading');
         }
-
-        // Test health endpoint
-        async function testHealth() {
-            const resultElement = document.getElementById('testResult');
-            resultElement.textContent = 'Fetching...';
-            try {
-                const response = await fetch(`${BASE_URL}/health`);
-                const data = await response.json();
-                resultElement.textContent = JSON.stringify(data, null, 2);
-            } catch (error) {
-                resultElement.textContent = `Error: ${error.message}`;
+    }
+    
+    function showResult(containerId, data, isError = false) {
+        const container = document.getElementById(containerId);
+        if (!container) return;
+        const color = isError ? '#ef4444' : '#10b981';
+        const prefix = isError ? '❌ Error: ' : '✅ ';
+        container.innerHTML = `<pre style="border-left: 3px solid ${color}; padding-left: 0.75rem;">${prefix}${typeof data === 'string' ? data : JSON.stringify(data, null, 2)}</pre>`;
+    }
+    
+    // Check API health
+    async function checkHealth() {
+        try {
+            const res = await fetch(`${BASE}/health`);
+            if (res.ok) {
+                statusBadge.className = 'status online';
+                statusBadge.innerText = '● ONLINE';
+                return true;
             }
+        } catch(e) {}
+        statusBadge.className = 'status offline';
+        statusBadge.innerText = '● OFFLINE';
+        return false;
+    }
+    
+    // Upload catalog
+    document.getElementById('uploadBtn').onclick = async () => {
+        const fileInput = document.getElementById('catalogFile');
+        const file = fileInput.files[0];
+        if (!file) {
+            showResult('uploadResult', 'Please select a JSON file first', true);
+            return;
         }
-
-        // Load status on page load
-        checkStatus();
-    </script>
+        setLoading('uploadBtn', true);
+        try {
+            const text = await file.text();
+            let products;
+            try {
+                products = JSON.parse(text);
+            } catch(e) {
+                // Try parsing as CSV? For now, assume JSON array
+                showResult('uploadResult', 'Invalid JSON. Please upload a valid JSON array of products', true);
+                setLoading('uploadBtn', false);
+                return;
+            }
+            const storeId = document.getElementById('storeId').value;
+            currentStoreId = storeId;
+            localStorage.setItem('storeId', storeId);
+            const res = await fetch(`${BASE}/ecommerce/catalog`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ store_id: storeId, products: products })
+            });
+            const data = await res.json();
+            if (res.ok) showResult('uploadResult', data);
+            else showResult('uploadResult', data.detail || 'Upload failed', true);
+        } catch(err) {
+            showResult('uploadResult', err.message, true);
+        }
+        setLoading('uploadBtn', false);
+    };
+    
+    // Get trends
+    document.getElementById('trendsBtn').onclick = async () => {
+        const storeId = document.getElementById('storeId').value;
+        setLoading('trendsBtn', true);
+        try {
+            const res = await fetch(`${BASE}/ecommerce/trends/${storeId}`);
+            const data = await res.json();
+            if (res.ok) showResult('trendsResult', data);
+            else showResult('trendsResult', data.detail || 'Failed', true);
+        } catch(err) {
+            showResult('trendsResult', err.message, true);
+        }
+        setLoading('trendsBtn', false);
+    };
+    
+    // Generate campaign
+    document.getElementById('campaignBtn').onclick = async () => {
+        const storeId = document.getElementById('storeId').value;
+        const productName = document.getElementById('productName').value;
+        const trend = document.getElementById('trendKeyword').value;
+        if (!productName) {
+            showResult('campaignResult', 'Please enter a product name', true);
+            return;
+        }
+        setLoading('campaignBtn', true);
+        try {
+            let url = `${BASE}/ecommerce/campaign/${storeId}/${encodeURIComponent(productName)}`;
+            if (trend) url += `?trend=${encodeURIComponent(trend)}`;
+            const res = await fetch(url);
+            const data = await res.json();
+            if (res.ok) showResult('campaignResult', data);
+            else showResult('campaignResult', data.detail || 'Failed', true);
+        } catch(err) {
+            showResult('campaignResult', err.message, true);
+        }
+        setLoading('campaignBtn', false);
+    };
+    
+    // AI Citation score
+    document.getElementById('citationBtn').onclick = async () => {
+        const storeId = document.getElementById('storeId').value;
+        const productName = document.getElementById('citationProduct').value;
+        if (!productName) {
+            showResult('citationResult', 'Please enter a product name', true);
+            return;
+        }
+        setLoading('citationBtn', true);
+        try {
+            const res = await fetch(`${BASE}/ecommerce/citation/${storeId}/${encodeURIComponent(productName)}`);
+            const data = await res.json();
+            if (res.ok) showResult('citationResult', data);
+            else showResult('citationResult', data.detail || 'Failed', true);
+        } catch(err) {
+            showResult('citationResult', err.message, true);
+        }
+        setLoading('citationBtn', false);
+    };
+    
+    // Weekly report
+    document.getElementById('reportBtn').onclick = async () => {
+        const storeId = document.getElementById('storeId').value;
+        setLoading('reportBtn', true);
+        try {
+            const res = await fetch(`${BASE}/ecommerce/weekly-report/${storeId}`);
+            const data = await res.json();
+            if (res.ok) showResult('reportResult', data);
+            else showResult('reportResult', data.detail || 'Failed', true);
+        } catch(err) {
+            showResult('reportResult', err.message, true);
+        }
+        setLoading('reportBtn', false);
+    };
+    
+    // Direct LLM call (Groq)
+    document.getElementById('llmBtn').onclick = async () => {
+        const prompt = document.getElementById('llmPrompt').value;
+        if (!prompt) {
+            showResult('llmResult', 'Please enter a prompt', true);
+            return;
+        }
+        setLoading('llmBtn', true);
+        try {
+            const res = await fetch(`${BASE}/llm/call`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ prompt: prompt, fallback: true })
+            });
+            const data = await res.json();
+            if (res.ok) showResult('llmResult', data);
+            else showResult('llmResult', data.detail || 'LLM call failed', true);
+        } catch(err) {
+            showResult('llmResult', err.message, true);
+        }
+        setLoading('llmBtn', false);
+    };
+    
+    // Set store ID from localStorage
+    storeIdInput.value = currentStoreId;
+    storeIdInput.onchange = () => {
+        currentStoreId = storeIdInput.value;
+        localStorage.setItem('storeId', currentStoreId);
+    };
+    
+    // Initial health check
+    checkHealth();
+    setInterval(checkHealth, 30000);
+</script>
 </body>
 </html>
