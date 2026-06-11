@@ -2,7 +2,7 @@
 VektorFlow 15xr - Main Entry Point
 15 agents. Memory fabric. Cognition sharing. E-commerce intelligence.
 """
-
+from fastapi.responses import FileResponse
 from fastapi import FastAPI, HTTPException, Header
 from pydantic import BaseModel
 from typing import Optional, Dict, Any, List
@@ -44,7 +44,7 @@ class CatalogUpdate(BaseModel):
 
 @app.get("/")
 def root():
-    return {
+    return FileResponse("static/index.html")
         "status": "online",
         "system": "VektorFlow 15xr",
         "version": "2.0",
