@@ -8,7 +8,7 @@ from pydantic import BaseModel
 from typing import Optional, Dict, Any, List
 import os
 from datetime import datetime
-
+from fastapi.staticfiles import StaticFiles
 # Import all modules
 from memory_fabric import MemoryFabric
 from agent_with_memory import VektorAgent
@@ -223,3 +223,4 @@ def detect_pattern(request: PatternRequest):
         operator.add_event(event)
     detected = operator.detect_pattern(request.pattern)
     return {"pattern": request.pattern, "detected": detected}
+app.mount("/", StaticFiles(directory="static", html=True), name="static")
