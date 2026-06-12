@@ -4,160 +4,151 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>VektorFlow 15xr | AI E-Commerce Dashboard</title>
-    <link href=https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css(https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css)" rel="stylesheet" integrity="sha384-QWTKZyjpPEjISv5WaRU9OFeRpok6YctnYmDr5pNlyT2bRjXh0JMhjY6hW+ALEwIH" crossorigin="anonymous">
+    <!-- Bootstrap 5 CSS (CDN) -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- Font Awesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        body {
-            font-family: system-ui, -apple-system, sans-serif;
-            background: linear-gradient(135deg, #0f0c29, #302b63, #24243e);
-            min-height: 100vh;
-            color: white;
-            padding: 1rem;
-        }
-        .container { max-width: 800px; margin: 0 auto; }
-        h1 { font-size: 2rem; margin-bottom: 0.5rem; }
-        .status {
-            display: inline-block;
-            padding: 0.25rem 0.75rem;
-            border-radius: 20px;
-            font-size: 0.8rem;
-            margin-bottom: 1rem;
-        }
-        .status.online { background: #10b981; }
-        .status.offline { background: #ef4444; }
-        .card {
-            background: rgba(255,255,255,0.1);
-            border-radius: 16px;
-            padding: 1.25rem;
-            margin-bottom: 1rem;
-            backdrop-filter: blur(10px);
-        }
-        input, textarea, select {
-            width: 100%;
-            padding: 0.75rem;
-            margin: 0.5rem 0;
-            border-radius: 8px;
-            border: none;
-            background: rgba(255,255,255,0.15);
-            color: white;
-        }
-        button {
-            background: #3b82f6;
-            color: white;
-            border: none;
-            padding: 0.75rem 1.5rem;
-            border-radius: 8px;
-            font-size: 1rem;
-            margin: 0.25rem;
-            cursor: pointer;
-        }
-        button:active { transform: scale(0.98); }
-        pre {
-            background: rgba(0,0,0,0.5);
-            padding: 1rem;
-            border-radius: 8px;
-            overflow-x: auto;
-            font-size: 0.75rem;
-            margin-top: 0.5rem;
-            white-space: pre-wrap;
-            word-break: break-word;
-        }
-        .result { margin-top: 1rem; }
-        .loading { opacity: 0.5; pointer-events: none; }
-        .flex-row { display: flex; gap: 0.5rem; flex-wrap: wrap; }
-        .store-id {
-            background: #1e1b4b;
-            padding: 0.5rem;
-            border-radius: 8px;
-            font-family: monospace;
-            margin-bottom: 1rem;
-        }
-        hr { margin: 1rem 0; border-color: rgba(255,255,255,0.1); }
-        .product-item {
-            background: rgba(255,255,255,0.05);
-            padding: 0.5rem;
-            margin: 0.5rem 0;
-            border-radius: 8px;
-        }
+        body { background: linear-gradient(135deg, #0f0c29, #302b63, #24243e); min-height: 100vh; }
+        .glass-card { background: rgba(255,255,255,0.1); backdrop-filter: blur(10px); border: 1px solid rgba(255,255,255,0.2); }
+        textarea, input, select { background: rgba(255,255,255,0.15) !important; color: white !important; border: none !important; }
+        textarea:focus, input:focus { background: rgba(255,255,255,0.25) !important; color: white !important; }
+        .btn-primary { background: #3b82f6; border: none; }
+        .btn-primary:hover { background: #2563eb; }
+        pre { background: rgba(0,0,0,0.4); padding: 1rem; border-radius: 0.5rem; white-space: pre-wrap; font-size: 0.8rem; }
+        .status-badge { position: fixed; top: 1rem; right: 1rem; z-index: 1000; }
+        .offline-badge { background: #dc2626; }
+        .online-badge { background: #10b981; }
     </style>
 </head>
-<body>
-<div class="container">
-    <h1>⚡ VektorFlow 15xr</h1>
-    <div id="statusBadge" class="status offline">● Checking...</div>
+<body class="text-white">
 
-    <!-- Store ID -->
-    <div class="card">
-        <h3>🏪 Your Store ID</h3>
-        <input type="text" id="storeId" placeholder="my-shopify-store" value="test-store">
-        <p style="font-size: 0.75rem; opacity: 0.7;">Use this ID to identify your catalog</p>
+<div class="container py-4">
+    <!-- Status Badge -->
+    <div class="status-badge">
+        <span id="statusBadge" class="badge bg-secondary">● Checking</span>
     </div>
 
-    <!-- Upload Catalog -->
-    <div class="card">
-        <h3>📦 1. Upload Your Product Catalog</h3>
-        <input type="file" id="catalogFile" accept=".json">
-        <button id="uploadBtn">⬆️ Upload Catalog</button>
-        <div id="uploadResult" class="result"></div>
+    <!-- Header -->
+    <div class="text-center mb-4">
+        <h1 class="display-4 fw-bold">⚡ VektorFlow 15xr</h1>
+        <p class="lead">15 AI Agents | Memory Fabric | E-Commerce Intelligence</p>
     </div>
 
-    <!-- Get Trends -->
-    <div class="card">
-        <h3>🔥 2. Find Trending Products</h3>
-        <button id="trendsBtn">📈 Get Trends for My Store</button>
-        <div id="trendsResult" class="result"></div>
+    <!-- Auth Section (shown when logged out) -->
+    <div id="authSection" class="row justify-content-center">
+        <div class="col-md-5">
+            <div class="card glass-card text-white">
+                <div class="card-body text-center p-4">
+                    <i class="fas fa-lock fa-3x mb-3 text-primary"></i>
+                    <h3>Sign In</h3>
+                    <p>Enter your email to start your 7-day free trial</p>
+                    <input type="email" id="loginEmail" class="form-control mb-2" placeholder="your@email.com">
+                    <input type="password" id="loginPassword" class="form-control mb-3" placeholder="Password (min 6 chars)">
+                    <button id="signupBtn" class="btn btn-primary w-100 mb-2">📝 Sign Up (Free Trial)</button>
+                    <button id="loginBtn" class="btn btn-outline-light w-100">🔓 Sign In</button>
+                    <div id="authMessage" class="mt-3 small"></div>
+                </div>
+            </div>
+        </div>
     </div>
 
-    <!-- Generate Campaign -->
-    <div class="card">
-        <h3>📱 3. Generate Click-to-Message Campaign</h3>
-        <input type="text" id="productName" placeholder="Product name (exactly as in catalog)">
-        <input type="text" id="trendKeyword" placeholder="Trend keyword (optional)">
-        <button id="campaignBtn">💬 Generate Campaign</button>
-        <div id="campaignResult" class="result"></div>
-    </div>
+    <!-- Dashboard Section (shown when logged in) -->
+    <div id="dashboardSection" style="display: none;">
+        <!-- User Bar -->
+        <div class="d-flex justify-content-between align-items-center glass-card p-3 rounded-3 mb-4">
+            <div><i class="fas fa-user-circle me-2"></i> <span id="userEmail"></span> | <span id="userTier" class="badge bg-info"></span></div>
+            <button id="logoutBtn" class="btn btn-danger btn-sm"><i class="fas fa-sign-out-alt"></i> Sign Out</button>
+        </div>
 
-    <!-- AI Citation Score -->
-    <div class="card">
-        <h3>🤖 4. AI Citation Score</h3>
-        <input type="text" id="citationProduct" placeholder="Product name">
-        <button id="citationBtn">📊 Get AI Score</button>
-        <div id="citationResult" class="result"></div>
-    </div>
+        <!-- Store ID -->
+        <div class="card glass-card mb-4">
+            <div class="card-body">
+                <h5><i class="fas fa-store me-2"></i> Your Store ID</h5>
+                <input type="text" id="storeId" class="form-control" placeholder="my-shopify-store" value="test-store">
+            </div>
+        </div>
 
-    <!-- Weekly Report -->
-    <div class="card">
-        <h3>📊 5. Weekly Intelligence Report</h3>
-        <button id="reportBtn">📋 Generate Weekly Report</button>
-        <div id="reportResult" class="result"></div>
-    </div>
+        <!-- Upload Catalog -->
+        <div class="card glass-card mb-4">
+            <div class="card-body">
+                <h5><i class="fas fa-upload me-2"></i> 1. Upload Your Product Catalog</h5>
+                <input type="file" id="catalogFile" class="form-control mb-2" accept=".json">
+                <button id="uploadBtn" class="btn btn-primary"><i class="fas fa-cloud-upload-alt"></i> Upload Catalog</button>
+                <div id="uploadResult" class="mt-2"></div>
+            </div>
+        </div>
 
-    <!-- Direct LLM Call -->
-    <div class="card">
-        <h3>🧠 6. Direct LLM Call (Groq)</h3>
-        <textarea id="llmPrompt" rows="2" placeholder="Ask something... e.g. Write a TikTok caption for wireless earbuds"></textarea>
-        <button id="llmBtn">🤖 Call AI</button>
-        <div id="llmResult" class="result"></div>
+        <!-- Get Trends -->
+        <div class="card glass-card mb-4">
+            <div class="card-body">
+                <h5><i class="fas fa-chart-line me-2"></i> 2. Find Trending Products</h5>
+                <button id="trendsBtn" class="btn btn-primary"><i class="fas fa-fire"></i> Get Trends for My Store</button>
+                <div id="trendsResult" class="mt-2"></div>
+            </div>
+        </div>
+
+        <!-- Generate Campaign -->
+        <div class="card glass-card mb-4">
+            <div class="card-body">
+                <h5><i class="fas fa-comment-dots me-2"></i> 3. Generate Click-to-Message Campaign</h5>
+                <input type="text" id="productName" class="form-control mb-2" placeholder="Product name">
+                <input type="text" id="trendKeyword" class="form-control mb-2" placeholder="Trend keyword (optional)">
+                <button id="campaignBtn" class="btn btn-primary"><i class="fas fa-envelope"></i> Generate Campaign</button>
+                <div id="campaignResult" class="mt-2"></div>
+            </div>
+        </div>
+
+        <!-- AI Citation Score -->
+        <div class="card glass-card mb-4">
+            <div class="card-body">
+                <h5><i class="fas fa-robot me-2"></i> 4. AI Citation Score (ChatGPT)</h5>
+                <input type="text" id="citationProduct" class="form-control mb-2" placeholder="Product name">
+                <button id="citationBtn" class="btn btn-primary"><i class="fas fa-chart-simple"></i> Get AI Score</button>
+                <div id="citationResult" class="mt-2"></div>
+            </div>
+        </div>
+
+        <!-- Weekly Report -->
+        <div class="card glass-card mb-4">
+            <div class="card-body">
+                <h5><i class="fas fa-newspaper me-2"></i> 5. Weekly Intelligence Report</h5>
+                <button id="reportBtn" class="btn btn-primary"><i class="fas fa-file-alt"></i> Generate Weekly Report</button>
+                <div id="reportResult" class="mt-2"></div>
+            </div>
+        </div>
+
+        <!-- LLM Call -->
+        <div class="card glass-card mb-4">
+            <div class="card-body">
+                <h5><i class="fas fa-brain me-2"></i> 6. AI Assistant</h5>
+                <select id="llmModel" class="form-select mb-2">
+                    <option value="groq">🚀 Groq (Fastest)</option>
+                    <option value="gemini">⭐ Gemini (Google)</option>
+                    <option value="huggingface">🤗 Hugging Face (Backup)</option>
+                </select>
+                <textarea id="llmPrompt" rows="2" class="form-control mb-2" placeholder="Ask something... e.g., Write a TikTok caption for wireless earbuds"></textarea>
+                <button id="llmBtn" class="btn btn-primary"><i class="fas fa-microphone-alt"></i> Call AI</button>
+                <div id="llmResult" class="mt-2"></div>
+            </div>
+        </div>
     </div>
 </div>
 
+<!-- Bootstrap JS Bundle -->
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+
 <script>
     const BASE = window.location.origin;
-    let currentStoreId = localStorage.getItem('storeId') || 'test-store';
+    let authToken = localStorage.getItem('authToken');
+    let currentUser = null;
 
-    // DOM elements
-    const storeIdInput = document.getElementById('storeId');
+    const authSection = document.getElementById('authSection');
+    const dashboardSection = document.getElementById('dashboardSection');
+    const userEmailSpan = document.getElementById('userEmail');
+    const userTierSpan = document.getElementById('userTier');
     const statusBadge = document.getElementById('statusBadge');
-    
-    // Helper
-    function setLoading(btnId, isLoading) {
-        const btn = document.getElementById(btnId);
-        if (btn) {
-            if (isLoading) btn.classList.add('loading');
-            else btn.classList.remove('loading');
-        }
-    }
-    
+
     function showResult(containerId, data, isError = false) {
         const container = document.getElementById(containerId);
         if (!container) return;
@@ -165,165 +156,190 @@
         const prefix = isError ? '❌ Error: ' : '✅ ';
         container.innerHTML = `<pre style="border-left: 3px solid ${color}; padding-left: 0.75rem;">${prefix}${typeof data === 'string' ? data : JSON.stringify(data, null, 2)}</pre>`;
     }
-    
-    // Check API health
+
+    function setLoading(btnId, isLoading) {
+        const btn = document.getElementById(btnId);
+        if (btn) btn.disabled = isLoading;
+    }
+
+    async function callApi(endpoint, method = 'GET', body = null, requiresAuth = true) {
+        const headers = { 'Content-Type': 'application/json' };
+        if (requiresAuth && authToken) headers['X-API-Key'] = authToken;
+        const res = await fetch(`${BASE}${endpoint}`, { method, headers, body: body ? JSON.stringify(body) : undefined });
+        const data = await res.json();
+        return { res, data };
+    }
+
     async function checkHealth() {
         try {
             const res = await fetch(`${BASE}/health`);
             if (res.ok) {
-                statusBadge.className = 'status online';
-                statusBadge.innerText = '● ONLINE';
+                statusBadge.className = 'badge online-badge';
+                statusBadge.innerHTML = '● ONLINE';
                 return true;
             }
         } catch(e) {}
-        statusBadge.className = 'status offline';
-        statusBadge.innerText = '● OFFLINE';
+        statusBadge.className = 'badge offline-badge';
+        statusBadge.innerHTML = '● OFFLINE';
         return false;
     }
-    
-    // Upload catalog
-    document.getElementById('uploadBtn').onclick = async () => {
-        const fileInput = document.getElementById('catalogFile');
-        const file = fileInput.files[0];
-        if (!file) {
-            showResult('uploadResult', 'Please select a JSON file first', true);
-            return;
+
+    async function signup(email, password) {
+        const res = await fetch(`${BASE}/auth/signup`, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email, password, store_name: email.split('@')[0] })
+        });
+        const data = await res.json();
+        if (res.ok) return await login(email, password);
+        throw new Error(data.detail || 'Signup failed');
+    }
+
+    async function login(email, password) {
+        const res = await fetch(`${BASE}/auth/login`, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email, password })
+        });
+        const data = await res.json();
+        if (res.ok) {
+            authToken = data.access_token;
+            localStorage.setItem('authToken', authToken);
+            currentUser = email;
+            showDashboard();
+            return true;
         }
+        throw new Error(data.detail || 'Login failed');
+    }
+
+    function logout() {
+        authToken = null;
+        localStorage.removeItem('authToken');
+        currentUser = null;
+        authSection.style.display = 'block';
+        dashboardSection.style.display = 'none';
+    }
+
+    async function showDashboard() {
+        authSection.style.display = 'none';
+        dashboardSection.style.display = 'block';
+        userEmailSpan.innerText = currentUser || 'User';
+        userTierSpan.innerText = 'Trial (7 days)';
+        checkHealth();
+        setInterval(checkHealth, 30000);
+    }
+
+    // Check if already logged in
+    if (authToken) {
+        currentUser = localStorage.getItem('userEmail') || 'User';
+        showDashboard();
+    } else {
+        authSection.style.display = 'block';
+        dashboardSection.style.display = 'none';
+    }
+
+    // Event listeners
+    document.getElementById('signupBtn')?.addEventListener('click', async () => {
+        const email = document.getElementById('loginEmail').value;
+        const password = document.getElementById('loginPassword').value;
+        const msgDiv = document.getElementById('authMessage');
+        if (!email || password.length < 6) { msgDiv.innerText = '❌ Valid email and password (min 6 chars)'; return; }
+        msgDiv.innerText = '⏳ Creating account...';
+        try {
+            await signup(email, password);
+            localStorage.setItem('userEmail', email);
+            msgDiv.innerText = '✅ Signed up!';
+            setTimeout(() => location.reload(), 1000);
+        } catch(err) { msgDiv.innerText = `❌ ${err.message}`; }
+    });
+
+    document.getElementById('loginBtn')?.addEventListener('click', async () => {
+        const email = document.getElementById('loginEmail').value;
+        const password = document.getElementById('loginPassword').value;
+        const msgDiv = document.getElementById('authMessage');
+        if (!email || !password) { msgDiv.innerText = '❌ Enter email and password'; return; }
+        msgDiv.innerText = '⏳ Logging in...';
+        try {
+            await login(email, password);
+            localStorage.setItem('userEmail', email);
+            msgDiv.innerText = '✅ Logged in!';
+            setTimeout(() => location.reload(), 1000);
+        } catch(err) { msgDiv.innerText = `❌ ${err.message}`; }
+    });
+
+    document.getElementById('logoutBtn')?.addEventListener('click', () => { logout(); location.reload(); });
+
+    // Dashboard buttons
+    document.getElementById('uploadBtn')?.addEventListener('click', async () => {
+        const file = document.getElementById('catalogFile').files[0];
+        if (!file) { showResult('uploadResult', 'Select a JSON file', true); return; }
         setLoading('uploadBtn', true);
         try {
             const text = await file.text();
-            let products;
-            try {
-                products = JSON.parse(text);
-            } catch(e) {
-                // Try parsing as CSV? For now, assume JSON array
-                showResult('uploadResult', 'Invalid JSON. Please upload a valid JSON array of products', true);
-                setLoading('uploadBtn', false);
-                return;
-            }
+            const products = JSON.parse(text);
             const storeId = document.getElementById('storeId').value;
-            currentStoreId = storeId;
-            localStorage.setItem('storeId', storeId);
-            const res = await fetch(`${BASE}/ecommerce/catalog`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ store_id: storeId, products: products })
-            });
-            const data = await res.json();
-            if (res.ok) showResult('uploadResult', data);
-            else showResult('uploadResult', data.detail || 'Upload failed', true);
-        } catch(err) {
-            showResult('uploadResult', err.message, true);
-        }
+            const { res, data } = await callApi('/ecommerce/catalog', 'POST', { store_id: storeId, products }, true);
+            showResult('uploadResult', data, !res.ok);
+        } catch(err) { showResult('uploadResult', err.message, true); }
         setLoading('uploadBtn', false);
-    };
-    
-    // Get trends
-    document.getElementById('trendsBtn').onclick = async () => {
+    });
+
+    document.getElementById('trendsBtn')?.addEventListener('click', async () => {
         const storeId = document.getElementById('storeId').value;
         setLoading('trendsBtn', true);
         try {
-            const res = await fetch(`${BASE}/ecommerce/trends/${storeId}`);
-            const data = await res.json();
-            if (res.ok) showResult('trendsResult', data);
-            else showResult('trendsResult', data.detail || 'Failed', true);
-        } catch(err) {
-            showResult('trendsResult', err.message, true);
-        }
+            const { res, data } = await callApi(`/ecommerce/trends/${storeId}`, 'GET', null, true);
+            showResult('trendsResult', data, !res.ok);
+        } catch(err) { showResult('trendsResult', err.message, true); }
         setLoading('trendsBtn', false);
-    };
-    
-    // Generate campaign
-    document.getElementById('campaignBtn').onclick = async () => {
+    });
+
+    document.getElementById('campaignBtn')?.addEventListener('click', async () => {
         const storeId = document.getElementById('storeId').value;
         const productName = document.getElementById('productName').value;
         const trend = document.getElementById('trendKeyword').value;
-        if (!productName) {
-            showResult('campaignResult', 'Please enter a product name', true);
-            return;
-        }
+        if (!productName) { showResult('campaignResult', 'Enter product name', true); return; }
         setLoading('campaignBtn', true);
         try {
-            let url = `${BASE}/ecommerce/campaign/${storeId}/${encodeURIComponent(productName)}`;
+            let url = `/ecommerce/campaign/${storeId}/${encodeURIComponent(productName)}`;
             if (trend) url += `?trend=${encodeURIComponent(trend)}`;
-            const res = await fetch(url);
-            const data = await res.json();
-            if (res.ok) showResult('campaignResult', data);
-            else showResult('campaignResult', data.detail || 'Failed', true);
-        } catch(err) {
-            showResult('campaignResult', err.message, true);
-        }
+            const { res, data } = await callApi(url, 'GET', null, true);
+            showResult('campaignResult', data, !res.ok);
+        } catch(err) { showResult('campaignResult', err.message, true); }
         setLoading('campaignBtn', false);
-    };
-    
-    // AI Citation score
-    document.getElementById('citationBtn').onclick = async () => {
+    });
+
+    document.getElementById('citationBtn')?.addEventListener('click', async () => {
         const storeId = document.getElementById('storeId').value;
         const productName = document.getElementById('citationProduct').value;
-        if (!productName) {
-            showResult('citationResult', 'Please enter a product name', true);
-            return;
-        }
+        if (!productName) { showResult('citationResult', 'Enter product name', true); return; }
         setLoading('citationBtn', true);
         try {
-            const res = await fetch(`${BASE}/ecommerce/citation/${storeId}/${encodeURIComponent(productName)}`);
-            const data = await res.json();
-            if (res.ok) showResult('citationResult', data);
-            else showResult('citationResult', data.detail || 'Failed', true);
-        } catch(err) {
-            showResult('citationResult', err.message, true);
-        }
+            const { res, data } = await callApi(`/ecommerce/citation/${storeId}/${encodeURIComponent(productName)}`, 'GET', null, true);
+            showResult('citationResult', data, !res.ok);
+        } catch(err) { showResult('citationResult', err.message, true); }
         setLoading('citationBtn', false);
-    };
-    
-    // Weekly report
-    document.getElementById('reportBtn').onclick = async () => {
+    });
+
+    document.getElementById('reportBtn')?.addEventListener('click', async () => {
         const storeId = document.getElementById('storeId').value;
         setLoading('reportBtn', true);
         try {
-            const res = await fetch(`${BASE}/ecommerce/weekly-report/${storeId}`);
-            const data = await res.json();
-            if (res.ok) showResult('reportResult', data);
-            else showResult('reportResult', data.detail || 'Failed', true);
-        } catch(err) {
-            showResult('reportResult', err.message, true);
-        }
+            const { res, data } = await callApi(`/ecommerce/weekly-report/${storeId}`, 'GET', null, true);
+            showResult('reportResult', data, !res.ok);
+        } catch(err) { showResult('reportResult', err.message, true); }
         setLoading('reportBtn', false);
-    };
-    
-    // Direct LLM call (Groq)
-    document.getElementById('llmBtn').onclick = async () => {
+    });
+
+    document.getElementById('llmBtn')?.addEventListener('click', async () => {
         const prompt = document.getElementById('llmPrompt').value;
-        if (!prompt) {
-            showResult('llmResult', 'Please enter a prompt', true);
-            return;
-        }
+        const model = document.getElementById('llmModel').value;
+        if (!prompt) { showResult('llmResult', 'Enter a prompt', true); return; }
         setLoading('llmBtn', true);
         try {
-            const res = await fetch(`${BASE}/llm/call`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ prompt: prompt, fallback: true })
-            });
-            const data = await res.json();
-            if (res.ok) showResult('llmResult', data);
-            else showResult('llmResult', data.detail || 'LLM call failed', true);
-        } catch(err) {
-            showResult('llmResult', err.message, true);
-        }
+            const { res, data } = await callApi('/llm/call', 'POST', { prompt, model, fallback: true }, true);
+            showResult('llmResult', data, !res.ok);
+        } catch(err) { showResult('llmResult', err.message, true); }
         setLoading('llmBtn', false);
-    };
-    
-    // Set store ID from localStorage
-    storeIdInput.value = currentStoreId;
-    storeIdInput.onchange = () => {
-        currentStoreId = storeIdInput.value;
-        localStorage.setItem('storeId', currentStoreId);
-    };
-    
-    // Initial health check
-    checkHealth();
-    setInterval(checkHealth, 30000);
+    });
 </script>
 </body>
 </html>
