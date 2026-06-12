@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>VektorFlow 15xr | AI E-Commerce Dashboard</title>
-    <!-- Bootstrap 5 CSS (CDN) -->
+    <!-- Bootstrap 5 CSS -->
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <!-- Font Awesome Icons -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
@@ -19,6 +19,7 @@
         .status-badge { position: fixed; top: 1rem; right: 1rem; z-index: 1000; }
         .offline-badge { background: #dc2626; }
         .online-badge { background: #10b981; }
+        .key-input { font-family: monospace; font-size: 0.8rem; }
     </style>
 </head>
 <body class="text-white">
@@ -59,6 +60,28 @@
         <div class="d-flex justify-content-between align-items-center glass-card p-3 rounded-3 mb-4">
             <div><i class="fas fa-user-circle me-2"></i> <span id="userEmail"></span> | <span id="userTier" class="badge bg-info"></span></div>
             <button id="logoutBtn" class="btn btn-danger btn-sm"><i class="fas fa-sign-out-alt"></i> Sign Out</button>
+        </div>
+
+        <!-- YOUR API KEYS SECTION (Users bring their own keys) -->
+        <div class="card glass-card mb-4">
+            <div class="card-body">
+                <h5><i class="fas fa-key me-2"></i> 🔐 Your API Keys (Save once)</h5>
+                <p class="small text-muted">Add your own keys. They are stored securely with your account.</p>
+                <div class="mb-2">
+                    <label class="form-label small">Groq API Key <i class="fas fa-bolt text-warning"></i></label>
+                    <input type="password" id="userGroqKey" class="form-control key-input" placeholder="gsk_...">
+                </div>
+                <div class="mb-2">
+                    <label class="form-label small">Gemini API Key <i class="fab fa-google text-danger"></i></label>
+                    <input type="password" id="userGeminiKey" class="form-control key-input" placeholder="AIza...">
+                </div>
+                <div class="mb-2">
+                    <label class="form-label small">Hugging Face API Key <i class="fas fa-face-smile text-info"></i></label>
+                    <input type="password" id="userHfKey" class="form-control key-input" placeholder="hf_...">
+                </div>
+                <button id="saveKeysBtn" class="btn btn-outline-light btn-sm mt-2"><i class="fas fa-save"></i> Save My Keys</button>
+                <div id="keysMessage" class="mt-2 small"></div>
+            </div>
         </div>
 
         <!-- Store ID -->
@@ -135,7 +158,6 @@
     </div>
 </div>
 
-<!-- Bootstrap JS Bundle -->
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 
 <script>
@@ -164,7 +186,7 @@
 
     async function callApi(endpoint, method = 'GET', body = null, requiresAuth = true) {
         const headers = { 'Content-Type': 'application/json' };
-        if (requiresAuth && authToken) headers['X-API-Key'] = authToken;
+        if (requiresAuth && authToken) headers['Authorization'] = `Bearer ${authToken}`;
         const res = await fetch(`${BASE}${endpoint}`, { method, headers, body: body ? JSON.stringify(body) : undefined });
         const data = await res.json();
         return { res, data };
@@ -204,10 +226,40 @@
             authToken = data.access_token;
             localStorage.setItem('authToken', authToken);
             currentUser = email;
+            await loadUserKeys();
             showDashboard();
             return true;
         }
         throw new Error(data.detail || 'Login failed');
+    }
+
+    async function saveUserKeys() {
+        const groqKey = document.getElementById('userGroqKey').value;
+        const geminiKey = document.getElementById('userGeminiKey').value;
+        const hfKey = document.getElementById('userHfKey').value;
+        
+        const { res, data } = await callApi('/user/keys', 'POST', {
+            groq_api_key: groqKey,
+            gemini_api_key: geminiKey,
+            hf_api_key: hfKey
+        }, true);
+        
+        const msgDiv = document.getElementById('keysMessage');
+        if (res.ok) {
+            msgDiv.innerHTML = '<span class="text-success">✅ Keys saved securely!</span>';
+            setTimeout(() => msgDiv.innerHTML = '', 3000);
+        } else {
+            msgDiv.innerHTML = `<span class="text-danger">❌ ${data.detail || 'Failed to save'}</span>`;
+        }
+    }
+
+    async function loadUserKeys() {
+        const { res, data } = await callApi('/user/keys', 'GET', null, true);
+        if (res.ok && data) {
+            if (data.groq_api_key) document.getElementById('userGroqKey').value = data.groq_api_key;
+            if (data.gemini_api_key) document.getElementById('userGeminiKey').value = data.gemini_api_key;
+            if (data.hf_api_key) document.getElementById('userHfKey').value = data.hf_api_key;
+        }
     }
 
     function logout() {
@@ -231,6 +283,7 @@
     if (authToken) {
         currentUser = localStorage.getItem('userEmail') || 'User';
         showDashboard();
+        loadUserKeys();
     } else {
         authSection.style.display = 'block';
         dashboardSection.style.display = 'none';
@@ -266,6 +319,7 @@
     });
 
     document.getElementById('logoutBtn')?.addEventListener('click', () => { logout(); location.reload(); });
+    document.getElementById('saveKeysBtn')?.addEventListener('click', saveUserKeys);
 
     // Dashboard buttons
     document.getElementById('uploadBtn')?.addEventListener('click', async () => {
