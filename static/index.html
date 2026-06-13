@@ -1,0 +1,438 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VektorFlow 15xr | Voice AI Assistant</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        body { background: linear-gradient(135deg, #0f0c29, #302b63, #24243e); min-height: 100vh; font-family: system-ui, -apple-system, sans-serif; }
+        .glass-card { background: rgba(255,255,255,0.1); backdrop-filter: blur(10px); border: 1px solid rgba(255,255,255,0.2); border-radius: 20px; }
+        textarea, input, select { background: rgba(255,255,255,0.15) !important; color: white !important; border: none !important; border-radius: 12px !important; }
+        .btn-primary { background: #3b82f6; border: none; border-radius: 12px; padding: 0.6rem 1.5rem; }
+        .btn-primary:hover { background: #2563eb; }
+        .status-badge { position: fixed; top: 1rem; right: 1rem; z-index: 1000; }
+        .mic-btn { background: #ef4444; border: none; border-radius: 50%; width: 60px; height: 60px; font-size: 1.8rem; margin: 0 auto; display: block; transition: all 0.2s; }
+        .mic-btn.listening { background: #10b981; transform: scale(1.1); animation: pulse 1.5s infinite; }
+        .mic-btn:active { transform: scale(0.95); }
+        @keyframes pulse { 0% { box-shadow: 0 0 0 0 rgba(16,185,129,0.7); } 70% { box-shadow: 0 0 0 15px rgba(16,185,129,0); } 100% { box-shadow: 0 0 0 0 rgba(16,185,129,0); } }
+        .response-card { background: rgba(0,0,0,0.4); border-radius: 16px; padding: 1rem; margin-top: 1rem; max-height: 300px; overflow-y: auto; }
+        .user-message { background: #3b82f6; padding: 0.5rem 1rem; border-radius: 18px; margin: 0.5rem 0; display: inline-block; max-width: 80%; }
+        .ai-message { background: #1e1b4b; padding: 0.5rem 1rem; border-radius: 18px; margin: 0.5rem 0; display: inline-block; max-width: 80%; border-left: 3px solid #10b981; }
+        .chat-container { display: flex; flex-direction: column; gap: 0.5rem; }
+        .speaking { background: #10b981; animation: pulse 1s infinite; }
+        pre { background: rgba(0,0,0,0.3); padding: 1rem; border-radius: 12px; white-space: pre-wrap; font-size: 0.8rem; color: #10b981; }
+        .listening-text { color: #10b981; font-size: 0.8rem; margin-top: 0.5rem; }
+    </style>
+</head>
+<body class="text-white">
+
+<div class="container py-4">
+    <div class="status-badge">
+        <span id="statusBadge" class="badge bg-secondary">● Checking</span>
+    </div>
+
+    <div class="text-center mb-4">
+        <h1 class="display-4 fw-bold">🎙️ VektorFlow 15xr</h1>
+        <p class="lead">Voice AI Assistant | Just tap and talk</p>
+    </div>
+
+    <!-- Auth Section -->
+    <div id="authSection" class="row justify-content-center">
+        <div class="col-md-5">
+            <div class="card glass-card text-white border-0">
+                <div class="card-body text-center p-4">
+                    <i class="fas fa-lock fa-3x mb-3 text-primary"></i>
+                    <h3>Sign In</h3>
+                    <p>Enter your email to start your 7-day free trial</p>
+                    <input type="email" id="loginEmail" class="form-control mb-2" placeholder="your@email.com">
+                    <input type="password" id="loginPassword" class="form-control mb-3" placeholder="Password (min 6 chars)">
+                    <button id="signupBtn" class="btn btn-primary w-100 mb-2">📝 Sign Up (Free Trial)</button>
+                    <button id="loginBtn" class="btn btn-outline-light w-100">🔓 Sign In</button>
+                    <div id="authMessage" class="mt-3 small"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Dashboard Section -->
+    <div id="dashboardSection" style="display: none;">
+        <!-- User Bar -->
+        <div class="d-flex justify-content-between align-items-center glass-card p-3 rounded-4 mb-4">
+            <div><i class="fas fa-user-circle me-2"></i> <span id="userEmail"></span> | <span id="userTier" class="badge bg-info"></span></div>
+            <button id="logoutBtn" class="btn btn-danger btn-sm"><i class="fas fa-sign-out-alt"></i> Sign Out</button>
+        </div>
+
+        <!-- API Keys -->
+        <div class="card glass-card mb-4 border-0">
+            <div class="card-body">
+                <h5><i class="fas fa-key me-2"></i> 🔐 Your API Keys</h5>
+                <div class="mb-2">
+                    <label class="form-label small">Groq API Key (required for voice)</label>
+                    <input type="password" id="userGroqKey" class="form-control" placeholder="gsk_...">
+                </div>
+                <div class="mb-2">
+                    <label class="form-label small">Gemini API Key (optional)</label>
+                    <input type="password" id="userGeminiKey" class="form-control" placeholder="AIza...">
+                </div>
+                <button id="saveKeysBtn" class="btn btn-outline-light btn-sm">💾 Save My Keys</button>
+                <div id="keysMessage" class="mt-2 small"></div>
+            </div>
+        </div>
+
+        <!-- Store ID -->
+        <div class="card glass-card mb-4 border-0">
+            <div class="card-body">
+                <h5><i class="fas fa-store me-2"></i> Your Store ID</h5>
+                <input type="text" id="storeId" class="form-control" placeholder="my-shopify-store" value="test-store">
+            </div>
+        </div>
+
+        <!-- Upload Catalog -->
+        <div class="card glass-card mb-4 border-0">
+            <div class="card-body">
+                <h5><i class="fas fa-upload me-2"></i> 1. Upload Your Product Catalog</h5>
+                <input type="file" id="catalogFile" class="form-control mb-2" accept=".json">
+                <button id="uploadBtn" class="btn btn-primary">📤 Upload Catalog</button>
+                <div id="uploadResult" class="mt-2"></div>
+            </div>
+        </div>
+
+        <!-- Get Trends -->
+        <div class="card glass-card mb-4 border-0">
+            <div class="card-body">
+                <h5><i class="fas fa-chart-line me-2"></i> 2. Find Trending Products</h5>
+                <button id="trendsBtn" class="btn btn-primary">🔥 Get Trends</button>
+                <div id="trendsResult" class="mt-2"></div>
+            </div>
+        </div>
+
+        <!-- Voice AI Assistant -->
+        <div class="card glass-card mb-4 border-0">
+            <div class="card-body text-center">
+                <h5><i class="fas fa-microphone-alt me-2"></i> 🎙️ Voice AI Assistant</h5>
+                <p class="small text-muted">Tap the mic, speak, and the AI will answer out loud</p>
+                
+                <select id="llmModel" class="form-select mb-3" style="max-width: 200px; margin: 0 auto;">
+                    <option value="groq">🚀 Groq</option>
+                    <option value="gemini">⭐ Gemini</option>
+                    <option value="huggingface">🤗 Hugging Face</option>
+                </select>
+
+                <button id="voiceBtn" class="mic-btn">
+                    <i class="fas fa-microphone"></i>
+                </button>
+                <div id="listeningStatus" class="listening-text mt-2">Tap mic to speak</div>
+
+                <!-- Conversation Display -->
+                <div class="response-card mt-3">
+                    <div id="conversation" class="chat-container">
+                        <div class="text-muted small text-center">Conversation will appear here</div>
+                    </div>
+                </div>
+
+                <!-- Manual text input (fallback) -->
+                <div class="mt-3">
+                    <textarea id="manualPrompt" rows="2" class="form-control" placeholder="Or type your question here..."></textarea>
+                    <button id="textSendBtn" class="btn btn-outline-light btn-sm mt-2">✏️ Send Text</button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    const BASE = window.location.origin;
+    let authToken = localStorage.getItem('authToken');
+    let recognition = null;
+    let isListening = false;
+    let currentModel = 'groq';
+    let synth = window.speechSynthesis;
+    let currentUtterance = null;
+
+    const authSection = document.getElementById('authSection');
+    const dashboardSection = document.getElementById('dashboardSection');
+    const statusBadge = document.getElementById('statusBadge');
+    const voiceBtn = document.getElementById('voiceBtn');
+    const listeningStatus = document.getElementById('listeningStatus');
+    const conversationDiv = document.getElementById('conversation');
+
+    // Initialize speech recognition
+    if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
+        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+        recognition = new SpeechRecognition();
+        recognition.continuous = false;
+        recognition.interimResults = false;
+        recognition.lang = 'en-US';
+
+        recognition.onstart = () => {
+            isListening = true;
+            voiceBtn.classList.add('listening');
+            listeningStatus.innerHTML = '🎙️ Listening... Speak now';
+            voiceBtn.innerHTML = '<i class="fas fa-stop"></i>';
+        };
+
+        recognition.onend = () => {
+            isListening = false;
+            voiceBtn.classList.remove('listening');
+            listeningStatus.innerHTML = 'Tap mic to speak';
+            voiceBtn.innerHTML = '<i class="fas fa-microphone"></i>';
+        };
+
+        recognition.onresult = (event) => {
+            const transcript = event.results[0][0].transcript;
+            listeningStatus.innerHTML = `📝 You said: "${transcript}"`;
+            addToConversation('user', transcript);
+            callAIAndSpeak(transcript);
+        };
+
+        recognition.onerror = (event) => {
+            listeningStatus.innerHTML = `❌ Error: ${event.error}`;
+            recognition.stop();
+        };
+    } else {
+        listeningStatus.innerHTML = '❌ Voice not supported on this browser';
+        voiceBtn.disabled = true;
+    }
+
+    // Add message to conversation
+    function addToConversation(role, text) {
+        const messageDiv = document.createElement('div');
+        messageDiv.className = role === 'user' ? 'user-message' : 'ai-message';
+        messageDiv.innerHTML = role === 'user' ? `<i class="fas fa-user me-1"></i> ${text}` : `<i class="fas fa-robot me-1"></i> ${text}`;
+        conversationDiv.appendChild(messageDiv);
+        conversationDiv.scrollTop = conversationDiv.scrollHeight;
+        
+        // Keep only last 20 messages
+        while (conversationDiv.children.length > 20) {
+            conversationDiv.removeChild(conversationDiv.firstChild);
+        }
+    }
+
+    // Speak text
+    function speakText(text) {
+        if (currentUtterance) {
+            synth.cancel();
+        }
+        currentUtterance = new SpeechSynthesisUtterance(text);
+        currentUtterance.lang = 'en-US';
+        currentUtterance.rate = 1.0;
+        currentUtterance.pitch = 1.0;
+        currentUtterance.onend = () => { currentUtterance = null; };
+        synth.speak(currentUtterance);
+    }
+
+    // Call AI and speak response
+    async function callAIAndSpeak(prompt) {
+        const model = document.getElementById('llmModel').value;
+        
+        // Show thinking indicator
+        const thinkingDiv = document.createElement('div');
+        thinkingDiv.className = 'ai-message';
+        thinkingDiv.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i> Thinking...';
+        conversationDiv.appendChild(thinkingDiv);
+        conversationDiv.scrollTop = conversationDiv.scrollHeight;
+        
+        try {
+            const { res, data } = await callApi('/llm/call', 'POST', { prompt, model });
+            
+            // Remove thinking indicator
+            conversationDiv.removeChild(thinkingDiv);
+            
+            if (res.ok && data.success) {
+                const responseText = data.response;
+                addToConversation('ai', responseText);
+                speakText(responseText);
+            } else {
+                const errorMsg = data.error || 'AI call failed';
+                addToConversation('ai', `❌ ${errorMsg}`);
+                speakText(`Sorry, ${errorMsg}`);
+            }
+        } catch (err) {
+            conversationDiv.removeChild(thinkingDiv);
+            addToConversation('ai', `❌ Error: ${err.message}`);
+            speakText(`Sorry, there was an error. ${err.message}`);
+        }
+    }
+
+    // Voice button click
+    if (voiceBtn) {
+        voiceBtn.addEventListener('click', () => {
+            if (!authToken) {
+                listeningStatus.innerHTML = '❌ Please log in first';
+                return;
+            }
+            if (recognition && !isListening) {
+                recognition.start();
+            } else if (recognition && isListening) {
+                recognition.stop();
+            }
+        });
+    }
+
+    // Manual text send
+    document.getElementById('textSendBtn')?.addEventListener('click', () => {
+        const prompt = document.getElementById('manualPrompt').value;
+        if (!prompt) return;
+        addToConversation('user', prompt);
+        callAIAndSpeak(prompt);
+        document.getElementById('manualPrompt').value = '';
+    });
+
+    async function callApi(endpoint, method = 'GET', body = null) {
+        const headers = { 'Content-Type': 'application/json' };
+        if (authToken) headers['api-key'] = authToken;
+        const res = await fetch(`${BASE}${endpoint}`, { method, headers, body: body ? JSON.stringify(body) : undefined });
+        const data = await res.json();
+        return { res, data };
+    }
+
+    async function checkHealth() {
+        try {
+            const res = await fetch(`${BASE}/health`);
+            if (res.ok) {
+                statusBadge.className = 'badge bg-success';
+                statusBadge.innerHTML = '● ONLINE';
+                return true;
+            }
+        } catch(e) {}
+        statusBadge.className = 'badge bg-danger';
+        statusBadge.innerHTML = '● OFFLINE';
+        return false;
+    }
+
+    async function signup(email, password) {
+        const res = await fetch(`${BASE}/auth/signup`, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email, password, store_name: email.split('@')[0] })
+        });
+        const data = await res.json();
+        if (res.ok) return await login(email, password);
+        throw new Error(data.detail || 'Signup failed');
+    }
+
+    async function login(email, password) {
+        const res = await fetch(`${BASE}/auth/login`, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email, password })
+        });
+        const data = await res.json();
+        if (res.ok) {
+            authToken = data.access_token;
+            localStorage.setItem('authToken', authToken);
+            await loadUserKeys();
+            authSection.style.display = 'none';
+            dashboardSection.style.display = 'block';
+            document.getElementById('userEmail').innerText = email;
+            document.getElementById('userTier').innerText = 'Trial (7 days)';
+            checkHealth();
+            setInterval(checkHealth, 30000);
+            return true;
+        }
+        throw new Error(data.detail || 'Login failed');
+    }
+
+    async function saveUserKeys() {
+        const groqKey = document.getElementById('userGroqKey').value;
+        const geminiKey = document.getElementById('userGeminiKey').value;
+        const { res, data } = await callApi('/user/keys', 'POST', {
+            groq_api_key: groqKey,
+            gemini_api_key: geminiKey,
+            hf_api_key: ""
+        });
+        const msgDiv = document.getElementById('keysMessage');
+        if (res.ok) {
+            msgDiv.innerHTML = '<span class="text-success">✅ Keys saved!</span>';
+            setTimeout(() => msgDiv.innerHTML = '', 3000);
+        } else {
+            msgDiv.innerHTML = `<span class="text-danger">❌ ${data.detail || 'Failed'}</span>`;
+        }
+    }
+
+    async function loadUserKeys() {
+        const { res, data } = await callApi('/user/keys', 'GET');
+        if (res.ok && data) {
+            if (data.groq_key) document.getElementById('userGroqKey').value = data.groq_key;
+            if (data.gemini_key) document.getElementById('userGeminiKey').value = data.gemini_key;
+        }
+    }
+
+    function logout() {
+        authToken = null;
+        localStorage.removeItem('authToken');
+        authSection.style.display = 'block';
+        dashboardSection.style.display = 'none';
+    }
+
+    if (authToken) {
+        authSection.style.display = 'none';
+        dashboardSection.style.display = 'block';
+        document.getElementById('userEmail').innerText = 'commander@vektorflow.com';
+        document.getElementById('userTier').innerText = 'Trial (7 days)';
+        loadUserKeys();
+        checkHealth();
+        setInterval(checkHealth, 30000);
+    }
+
+    document.getElementById('signupBtn')?.addEventListener('click', async () => {
+        const email = document.getElementById('loginEmail').value;
+        const password = document.getElementById('loginPassword').value;
+        const msgDiv = document.getElementById('authMessage');
+        if (!email || password.length < 6) { msgDiv.innerText = '❌ Valid email and password (min 6 chars)'; return; }
+        msgDiv.innerText = '⏳ Creating account...';
+        try {
+            await signup(email, password);
+            localStorage.setItem('userEmail', email);
+            msgDiv.innerText = '✅ Signed up!';
+            setTimeout(() => location.reload(), 1000);
+        } catch(err) { msgDiv.innerText = `❌ ${err.message}`; }
+    });
+
+    document.getElementById('loginBtn')?.addEventListener('click', async () => {
+        const email = document.getElementById('loginEmail').value;
+        const password = document.getElementById('loginPassword').value;
+        const msgDiv = document.getElementById('authMessage');
+        if (!email || !password) { msgDiv.innerText = '❌ Enter email and password'; return; }
+        msgDiv.innerText = '⏳ Logging in...';
+        try {
+            await login(email, password);
+            localStorage.setItem('userEmail', email);
+            msgDiv.innerText = '✅ Logged in!';
+            setTimeout(() => location.reload(), 1000);
+        } catch(err) { msgDiv.innerText = `❌ ${err.message}`; }
+    });
+
+    document.getElementById('logoutBtn')?.addEventListener('click', () => { logout(); location.reload(); });
+    document.getElementById('saveKeysBtn')?.addEventListener('click', saveUserKeys);
+
+    document.getElementById('uploadBtn')?.addEventListener('click', async () => {
+        const file = document.getElementById('catalogFile').files[0];
+        if (!file) { document.getElementById('uploadResult').innerHTML = '<pre class="text-danger">Select a JSON file</pre>'; return; }
+        document.getElementById('uploadBtn').disabled = true;
+        try {
+            const text = await file.text();
+            const products = JSON.parse(text);
+            const storeId = document.getElementById('storeId').value;
+            const { res, data } = await callApi('/ecommerce/catalog', 'POST', { store_id: storeId, products });
+            document.getElementById('uploadResult').innerHTML = `<pre>✅ ${JSON.stringify(data, null, 2)}</pre>`;
+        } catch(err) {
+            document.getElementById('uploadResult').innerHTML = `<pre class="text-danger">❌ ${err.message}</pre>`;
+        }
+        document.getElementById('uploadBtn').disabled = false;
+    });
+
+    document.getElementById('trendsBtn')?.addEventListener('click', async () => {
+        const storeId = document.getElementById('storeId').value;
+        document.getElementById('trendsBtn').disabled = true;
+        try {
+            const { res, data } = await callApi(`/ecommerce/trends/${storeId}`, 'GET');
+            document.getElementById('trendsResult').innerHTML = `<pre>${JSON.stringify(data, null, 2)}</pre>`;
+        } catch(err) {
+            document.getElementById('trendsResult').innerHTML = `<pre class="text-danger">❌ ${err.message}</pre>`;
+        }
+        document.getElementById('trendsBtn').disabled = false;
+    });
+</script>
+</body>
+</html>
