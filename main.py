@@ -18,8 +18,7 @@ from database import get_db, get_user, create_user, save_api_keys, get_api_keys
 from llm_router import route_llm
 from hybrid_search import hybrid_search, get_trends_for_catalog
 from human_loop import create_pending_approval, get_pending_approvals, resolve_approval
-from payment import router as payment_router
-from memory_dashboard import router as memory_router
+
 
 app = FastAPI(title="VektorFlow 15xr", description="Complete AI Agent Platform")
 
