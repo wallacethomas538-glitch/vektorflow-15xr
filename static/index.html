@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
     <title>VektorFlow 15xr | Full AI Command Center</title>
+    <!-- Tailwind CSS CDN -->
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
         tailwind.config = {
@@ -27,9 +28,10 @@
             }
         }
     </script>
+    <!-- Font Awesome -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
-        /* Pulse Animation for active voice listening */
+        /* Pulse Animation for active voice listening buttons */
         @keyframes custom-pulse {
             0% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7); }
             70% { box-shadow: 0 0 0 15px rgba(16, 185, 129, 0); }
@@ -39,7 +41,7 @@
             background-color: #10b981 !important;
             animation: custom-pulse 1.5s infinite;
         }
-        /* Custom scrollbars for task container */
+        /* Custom scrollbars for scrollable elements */
         .custom-scrollbar::-webkit-scrollbar {
             width: 6px;
         }
@@ -53,12 +55,25 @@
         .dark .custom-scrollbar::-webkit-scrollbar-thumb {
             background: #475569;
         }
+        /* Audio visualizer wave animations */
+        @keyframes soundWave {
+            0%, 100% { transform: scaleY(0.3); }
+            50% { transform: scaleY(1); }
+        }
+        .wave-bar {
+            animation: soundWave 1.2s ease-in-out infinite;
+        }
+        .wave-bar:nth-child(2) { animation-delay: 0.15s; }
+        .wave-bar:nth-child(3) { animation-delay: 0.3s; }
+        .wave-bar:nth-child(4) { animation-delay: 0.45s; }
+        .wave-bar:nth-child(5) { animation-delay: 0.6s; }
     </style>
 </head>
 <body class="bg-slate-50 dark:bg-slate-900 font-sans text-slate-800 dark:text-slate-100 transition-colors duration-300 min-h-screen antialiased selection:bg-brand-200">
 
+<!-- LOGIN PAGE -->
 <div id="authPage" class="min-h-screen flex items-center justify-center p-4 bg-gradient-to-br from-slate-50 to-slate-100 dark:from-slate-900 dark:to-slate-950 transition-colors duration-300">
-    <div class="bg-white dark:bg-slate-800 border border-slate-200/80 dark:border-slate-700/80 rounded-3xl p-8 max-width-[420px] w-full shadow-xl shadow-slate-200/50 dark:shadow-none transition-all transform hover:scale-[1.01]">
+    <div class="bg-white dark:bg-slate-800 border border-slate-200/80 dark:border-slate-700/80 rounded-3xl p-8 max-w-[420px] w-full shadow-xl shadow-slate-200/50 dark:shadow-none transition-all transform hover:scale-[1.01]">
         <div class="text-center mb-6">
             <div class="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-brand-50 dark:bg-brand-500/10 mb-3">
                 <i class="fas fa-bolt text-3xl text-brand-500"></i>
@@ -67,6 +82,7 @@
             <p class="text-sm text-slate-500 dark:text-slate-400 mt-1">Full AI Command Center</p>
         </div>
         
+        <!-- Standard Sign In Form Fields -->
         <div class="space-y-3">
             <div>
                 <input type="email" id="loginEmail" class="w-full px-4 py-3 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent transition-all text-sm" placeholder="your@email.com">
@@ -82,13 +98,33 @@
                 <span>🔓 Sign In</span>
             </button>
         </div>
+
+        <!-- Social Media Federated Single Sign On Layout -->
+        <div class="mt-5 pt-4 border-t border-slate-200 dark:border-slate-700">
+            <div class="text-center mb-3">
+                <span class="text-[11px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider bg-white dark:bg-slate-800 px-2 relative -top-[23px]">Or Connect With</span>
+            </div>
+            <div class="grid grid-cols-3 gap-2.5 -mt-3">
+                <button onclick="alert('Google integration initialized.')" class="flex items-center justify-center py-2.5 border border-slate-200 dark:border-slate-700 rounded-xl bg-slate-50 dark:bg-slate-900/50 hover:bg-slate-100 dark:hover:bg-slate-700 text-sm transition-all text-slate-700 dark:text-slate-200" title="Sign In with Google">
+                    <i class="fab fa-google text-red-500 text-base"></i>
+                </button>
+                <button onclick="alert('Facebook integration initialized.')" class="flex items-center justify-center py-2.5 border border-slate-200 dark:border-slate-700 rounded-xl bg-slate-50 dark:bg-slate-900/50 hover:bg-slate-100 dark:hover:bg-slate-700 text-sm transition-all text-slate-700 dark:text-slate-200" title="Sign In with Facebook">
+                    <i class="fab fa-facebook text-blue-600 text-base"></i>
+                </button>
+                <button onclick="alert('Apple integration initialized.')" class="flex items-center justify-center py-2.5 border border-slate-200 dark:border-slate-700 rounded-xl bg-slate-50 dark:bg-slate-900/50 hover:bg-slate-100 dark:hover:bg-slate-700 text-sm transition-all text-slate-700 dark:text-slate-200" title="Sign In with Apple">
+                    <i class="fab fa-apple text-slate-900 dark:text-white text-base"></i>
+                </button>
+            </div>
+        </div>
         
         <div id="authMessage" class="mt-4 text-xs text-center font-medium text-slate-500 dark:text-slate-400 min-h-[16px]"></div>
     </div>
 </div>
 
+<!-- MAIN DASHBOARD -->
 <div id="dashboardContainer" class="hidden min-h-screen flex-col bg-slate-50 dark:bg-slate-900 transition-colors duration-300">
     
+    <!-- Top Bar -->
     <header class="bg-white/80 dark:bg-slate-800/80 backdrop-blur-md border-b border-slate-200/80 dark:border-slate-700/80 px-4 md:px-8 py-3.5 sticky top-0 z-50 flex justify-between items-center transition-colors duration-300">
         <div class="flex items-center gap-2.5">
             <i class="fas fa-bolt text-xl text-brand-500"></i>
@@ -96,8 +132,19 @@
             <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-emerald-50 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 tracking-wider ml-1" id="statusBadge">● ONLINE</span>
         </div>
         <div class="flex items-center gap-4">
+            <!-- Persistent Global Dynamic Mic Voice Visualization Waves Section -->
+            <div id="globalVoiceWave" class="hidden items-center gap-0.5 px-3 py-1.5 bg-emerald-50 dark:bg-emerald-500/10 rounded-xl border border-emerald-200/30">
+                <span class="text-[10px] text-emerald-600 dark:text-emerald-400 font-bold tracking-wider uppercase mr-1.5">Listening</span>
+                <div class="wave-bar w-0.5 h-3.5 bg-emerald-500 rounded-full origin-bottom"></div>
+                <div class="wave-bar w-0.5 h-3.5 bg-emerald-500 rounded-full origin-bottom"></div>
+                <div class="wave-bar w-0.5 h-3.5 bg-emerald-500 rounded-full origin-bottom"></div>
+                <div class="wave-bar w-0.5 h-3.5 bg-emerald-500 rounded-full origin-bottom"></div>
+                <div class="wave-bar w-0.5 h-3.5 bg-emerald-500 rounded-full origin-bottom"></div>
+            </div>
+
             <span id="userEmailDisplay" class="text-xs font-medium text-slate-500 dark:text-slate-400 hidden sm:inline"></span>
             
+            <!-- Dark Mode Toggle Button -->
             <button id="themeToggle" class="p-2 text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-xl transition-all" aria-label="Toggle Dark Mode">
                 <i class="fas fa-moon dark:hidden text-lg"></i>
                 <i class="fas fa-sun hidden dark:block text-lg"></i>
@@ -109,10 +156,13 @@
         </div>
     </header>
 
+    <!-- Main Dynamic Content Wrap -->
     <main class="flex-grow px-4 md:px-8 py-6 max-w-6xl w-full mx-auto pb-24 md:pb-12">
         
-        <div id="homePage" class="page-section hidden block">
+        <!-- HOME PAGE SECTION -->
+        <div id="homePage" class="page-section hidden">
             
+            <!-- Stats Grid -->
             <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
                 <div class="bg-white dark:bg-slate-800 border border-slate-200/60 dark:border-slate-700/60 rounded-2xl p-4 shadow-sm transition-colors duration-300">
                     <div class="text-slate-400 dark:text-slate-500 font-medium text-xs uppercase tracking-wider">Products</div>
@@ -132,6 +182,7 @@
                 </div>
             </div>
 
+            <!-- API Keys Settings Interface -->
             <div class="bg-white dark:bg-slate-800 border border-slate-200/60 dark:border-slate-700/60 rounded-2xl p-5 shadow-sm mb-6 transition-colors duration-300">
                 <h5 class="text-base font-bold text-slate-900 dark:text-white flex items-center mb-4">
                     <i class="fas fa-key text-brand-500 mr-2.5"></i>🔐 Your API Keys
@@ -158,6 +209,7 @@
                 </div>
             </div>
 
+            <!-- AI Model Routing Selection Grid -->
             <h5 class="text-sm font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-3 flex items-center">
                 <i class="fas fa-microchip mr-2"></i>Active AI Model
             </h5>
@@ -179,6 +231,7 @@
                 </div>
             </div>
 
+            <!-- Task Configuration Panel -->
             <h5 class="text-sm font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-3 flex items-center">
                 <i class="fas fa-tasks mr-2"></i>Assign Task to AI Agent
             </h5>
@@ -210,6 +263,7 @@
                 </div>
             </div>
 
+            <!-- Task Operational Log Results Output Container -->
             <h5 class="text-sm font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-3 flex items-center">
                 <i class="fas fa-clipboard-list mr-2"></i>Task Results
             </h5>
@@ -218,6 +272,62 @@
             </div>
         </div>
 
+        <!-- NEW LLM PAGE INTERFACE SECTION -->
+        <div id="llmPage" class="page-section hidden">
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <!-- System Config Side panel -->
+                <div class="md:col-span-1 space-y-4">
+                    <div class="bg-white dark:bg-slate-800 border border-slate-200/60 dark:border-slate-700/60 rounded-2xl p-5 shadow-sm transition-colors duration-300">
+                        <h5 class="text-sm font-bold text-slate-900 dark:text-white flex items-center mb-3">
+                            <i class="fas fa-sliders-h text-brand-500 mr-2"></i>Context Configuration
+                        </h5>
+                        <div class="space-y-3">
+                            <div>
+                                <label class="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">System Prompt Context</label>
+                                <textarea id="llmSystemPrompt" rows="4" class="w-full px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand-500" placeholder="You are a helpful expert assistant. Core directive is optimization..."></textarea>
+                            </div>
+                            <div>
+                                <label class="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Temperature</label>
+                                <input type="range" min="0" max="1" step="0.1" value="0.7" class="w-full accent-brand-500 bg-slate-100 dark:bg-slate-700 rounded-lg appearance-none h-1.5">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Core LLM Conversation Chat Stream Console -->
+                <div class="md:col-span-2 flex flex-col bg-white dark:bg-slate-800 border border-slate-200/60 dark:border-slate-700/60 rounded-2xl shadow-sm transition-colors duration-300 h-[500px]">
+                    <div class="p-4 border-b border-slate-100 dark:border-slate-700/50 flex justify-between items-center">
+                        <span class="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                            <i class="fas fa-brain text-brand-500"></i> Direct LLM Prompt Engine
+                        </span>
+                        <button onclick="document.getElementById('llmChatStream').innerHTML='';" class="text-xs text-slate-400 hover:text-rose-500 transition-colors"><i class="fas fa-trash-alt mr-1"></i> Clear</button>
+                    </div>
+                    
+                    <!-- Chat Message Area -->
+                    <div id="llmChatStream" class="flex-grow p-4 overflow-y-auto custom-scrollbar space-y-3 text-xs">
+                        <div class="bg-slate-50 dark:bg-slate-900/50 p-3 rounded-xl border border-slate-100 dark:border-slate-800 max-w-[85%]">
+                            <p class="font-bold text-brand-500 mb-0.5">System</p>
+                            <p class="text-slate-600 dark:text-slate-300 leading-relaxed">Direct context stream linked. Enter plain query prompts below or initialize hands-free transcription capture via dictation matrix.</p>
+                        </div>
+                    </div>
+
+                    <!-- Chat Typing Input Container Component -->
+                    <div class="p-3 border-t border-slate-100 dark:border-slate-700/50 bg-slate-50/50 dark:bg-slate-900/20 rounded-b-2xl">
+                        <div class="flex gap-2">
+                            <input type="text" id="llmChatInput" class="flex-grow px-3.5 py-2.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand-500" placeholder="Type direct inference command prompt...">
+                            <button id="llmVoiceBtn" class="w-10 h-10 bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 rounded-xl flex items-center justify-center text-sm transition-all hover:bg-slate-200 dark:hover:bg-slate-600 flex-shrink-0">
+                                <i class="fas fa-microphone"></i>
+                            </button>
+                            <button id="llmSendBtn" class="w-10 h-10 bg-brand-500 hover:bg-brand-600 text-white rounded-xl flex items-center justify-center text-sm transition-all flex-shrink-0">
+                                <i class="fas fa-paper-plane"></i>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- CATALOG MANAGEMENT INTERFACE PAGE -->
         <div id="catalogPage" class="page-section hidden">
             <div class="bg-white dark:bg-slate-800 border border-slate-200/60 dark:border-slate-700/60 rounded-2xl p-5 shadow-sm transition-colors duration-300">
                 <h5 class="text-base font-bold text-slate-900 dark:text-white flex items-center mb-4">
@@ -238,6 +348,7 @@
             </div>
         </div>
 
+        <!-- AGENTS ARCHITECTURE PAGE STATUS LIST -->
         <div id="agentsPage" class="page-section hidden">
             <div class="bg-white dark:bg-slate-800 border border-slate-200/60 dark:border-slate-700/60 rounded-2xl p-5 shadow-sm transition-colors duration-300">
                 <h5 class="text-base font-bold text-slate-900 dark:text-white flex items-center mb-3">
@@ -268,6 +379,7 @@
             </div>
         </div>
 
+        <!-- CAMPAIGNS GENERATIVE SYSTEM ENGINE PAGE -->
         <div id="campaignsPage" class="page-section hidden">
             <div class="space-y-4">
                 <div class="bg-white dark:bg-slate-800 border border-slate-200/60 dark:border-slate-700/60 rounded-2xl p-5 shadow-sm transition-colors duration-300">
@@ -292,6 +404,7 @@
             </div>
         </div>
 
+        <!-- RECONCILIATIONS FOOTER -->
         <footer class="mt-12 pt-6 border-t border-slate-200/60 dark:border-slate-800 text-center space-y-2 transition-colors duration-300 max-w-2xl mx-auto">
             <p class="text-[11px] leading-relaxed text-slate-400 dark:text-slate-500 font-medium">
                 ⚠️ AI outputs are machine-generated. Do not rely on them for legal, medical, or financial decisions.
@@ -304,10 +417,15 @@
         </footer>
     </main>
 
-    <nav class="fixed bottom-0 left-0 right-0 bg-white/90 dark:bg-slate-800/90 backdrop-blur-lg border-t border-slate-200/80 dark:border-slate-700/50 flex justify-around p-2 z-50 transition-colors duration-300 shadow-lg shadow-slate-900/5">
-        <button class="nav-tab active flex flex-col items-center gap-0.5 py-1 px-3.5 rounded-xl text-[11px] font-medium transition-all text-slate-400 hover:text-slate-600 dark:text-slate-500 dark:hover:text-slate-400" data-page="home">
+    <!-- FLOATING TAB NAVIGATION BAR -->
+    <nav class="fixed bottom-0 left-0 right-0 bg-white/90 dark:bg-slate-800/90 backdrop-blur-lg border-t border-slate-200/80 dark:border-slate-700/50 flex justify-around p-2 z-50 transition-colors duration-300 shadow-lg shadow-slate-900/5 overflow-x-auto custom-scrollbar">
+        <button class="nav-tab flex flex-col items-center gap-0.5 py-1 px-3.5 rounded-xl text-[11px] font-medium transition-all text-slate-400 hover:text-slate-600 dark:text-slate-500 dark:hover:text-slate-400" data-page="home">
             <i class="fas fa-home text-base"></i>
             <span>Home</span>
+        </button>
+        <button class="nav-tab flex flex-col items-center gap-0.5 py-1 px-3.5 rounded-xl text-[11px] font-medium transition-all text-slate-400 hover:text-slate-600 dark:text-slate-500 dark:hover:text-slate-400" data-page="llm">
+            <i class="fas fa-brain text-base"></i>
+            <span>LLM</span>
         </button>
         <button class="nav-tab flex flex-col items-center gap-0.5 py-1 px-3.5 rounded-xl text-[11px] font-medium transition-all text-slate-400 hover:text-slate-600 dark:text-slate-500 dark:hover:text-slate-400" data-page="catalog">
             <i class="fas fa-box text-base"></i>
@@ -331,6 +449,7 @@
     let currentStoreId = 'test-store';
     let recognition = null;
     let isListening = false;
+    let activeVoiceTarget = 'agent'; // Maps voice streams: 'agent' or 'direct-llm'
     let synth = window.speechSynthesis;
 
     // Core Dark Mode Initialization and Application Logic Strategy
@@ -374,6 +493,34 @@
     });
     syncModelSelectionUI();
 
+    // Toggle Listening Global Animation Layer Views
+    function setVoiceAnimationState(start) {
+        const waveContainer = document.getElementById('globalVoiceWave');
+        const agentVoiceBtn = document.getElementById('voiceTaskBtn');
+        const directLlmVoiceBtn = document.getElementById('llmVoiceBtn');
+
+        if (start) {
+            waveContainer.classList.remove('hidden');
+            waveContainer.classList.add('flex');
+            if (activeVoiceTarget === 'agent') {
+                agentVoiceBtn.classList.add('mic-listening');
+                agentVoiceBtn.innerHTML = '<i class="fas fa-stop"></i>';
+                document.getElementById('taskStatus').innerHTML = '🎙️ Listening...';
+            } else {
+                directLlmVoiceBtn.classList.add('bg-emerald-500', 'text-white', 'animate-pulse');
+            }
+        } else {
+            waveContainer.classList.remove('flex');
+            waveContainer.classList.add('hidden');
+            agentVoiceBtn.classList.remove('mic-listening');
+            agentVoiceBtn.innerHTML = '<i class="fas fa-microphone"></i>';
+            directLlmVoiceBtn.classList.remove('bg-emerald-500', 'text-white', 'animate-pulse');
+            if (document.getElementById('taskStatus').innerHTML === '🎙️ Listening...') {
+                document.getElementById('taskStatus').innerHTML = '';
+            }
+        }
+    }
+
     // WebKit Speech Recognition Execution Engine API Loop Mapping Strategy
     if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
         const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -381,28 +528,33 @@
         recognition.continuous = false;
         recognition.interimResults = false;
         recognition.lang = 'en-US';
+        
         recognition.onstart = () => {
             isListening = true;
-            const voiceBtn = document.getElementById('voiceTaskBtn');
-            voiceBtn.classList.add('mic-listening');
-            voiceBtn.innerHTML = '<i class="fas fa-stop"></i>';
-            document.getElementById('taskStatus').innerHTML = '🎙️ Listening...';
+            setVoiceAnimationState(true);
         };
         recognition.onend = () => {
             isListening = false;
-            const voiceBtn = document.getElementById('voiceTaskBtn');
-            voiceBtn.classList.remove('mic-listening');
-            voiceBtn.innerHTML = '<i class="fas fa-microphone"></i>';
-            if (document.getElementById('taskStatus').innerHTML === '🎙️ Listening...') {
-                document.getElementById('taskStatus').innerHTML = '';
-            }
+            setVoiceAnimationState(false);
         };
         recognition.onresult = async (event) => {
             const transcript = event.results[0][0].transcript;
-            document.getElementById('agentTaskInput').value = transcript;
-            document.getElementById('taskStatus').innerHTML = '⏳ Processing voice...';
-            await runAgentTask(transcript);
+            if (activeVoiceTarget === 'agent') {
+                document.getElementById('agentTaskInput').value = transcript;
+                document.getElementById('taskStatus').innerHTML = '⏳ Processing voice...';
+                await runAgentTask(transcript);
+            } else {
+                document.getElementById('llmChatInput').value = transcript;
+                await triggerDirectLlmMessage();
+            }
         };
+    }
+
+    function toggleVoiceRecognition(target) {
+        if (!authToken) { speakText('Please log in first'); return; }
+        activeVoiceTarget = target;
+        if (recognition && !isListening) recognition.start();
+        else if (recognition && isListening) recognition.stop();
     }
 
     async function runAgentTask(task) {
@@ -424,6 +576,43 @@
             addTaskResult(task, `Error: ${err.message}`, agent);
             document.getElementById('taskStatus').innerHTML = `❌ ${err.message}`;
         }
+    }
+
+    // Direct LLM Execution Chat Messaging Logic Pipeline Matrix
+    async function triggerDirectLlmMessage() {
+        const inputEl = document.getElementById('llmChatInput');
+        const text = inputEl.value.trim();
+        if (!text) return;
+
+        inputEl.value = '';
+        appendLlmChatMessage('User', text, 'text-slate-800 dark:text-slate-200 bg-brand-50/50 dark:bg-brand-500/5 ml-auto');
+
+        const systemCtx = document.getElementById('llmSystemPrompt').value;
+        const completePrompt = systemCtx ? `[System Context: ${systemCtx}] User Query: ${text}` : text;
+
+        try {
+            const { res, data } = await callApi('/llm/call', 'POST', { prompt: completePrompt, model: selectedModel });
+            if (res.ok && data.success) {
+                appendLlmChatMessage('AI Model Output', data.response, 'bg-slate-50 dark:bg-slate-900 border border-slate-100 dark:border-slate-800');
+                speakText(data.response.substring(0, 200));
+            } else {
+                appendLlmChatMessage('System Error', data.error || 'Direct prompt request pipeline processing error.', 'bg-rose-50 dark:bg-rose-950/20 text-rose-600 dark:text-rose-400');
+            }
+        } catch (err) {
+            appendLlmChatMessage('System Error', err.message, 'bg-rose-50 dark:bg-rose-950/20 text-rose-600 dark:text-rose-400');
+        }
+    }
+
+    function appendLlmChatMessage(sender, message, styleClasses) {
+        const chatContainer = document.getElementById('llmChatStream');
+        const bubble = document.createElement('div');
+        bubble.className = `p-3 rounded-xl max-w-[85%] ${styleClasses}`;
+        bubble.innerHTML = `
+            <p class="font-bold mb-0.5 ${sender === 'User' ? 'text-brand-600 dark:text-brand-400' : 'text-slate-400'}">${sender}</p>
+            <p class="leading-relaxed whitespace-pre-wrap">${message}</p>
+        `;
+        chatContainer.appendChild(bubble);
+        chatContainer.scrollTop = chatContainer.scrollHeight;
     }
 
     function addTaskResult(task, result, agent) {
@@ -515,7 +704,7 @@
         document.getElementById(`${pageId}Page`).classList.remove('hidden');
         
         document.querySelectorAll('.nav-tab').forEach(t => {
-            t.classList.remove('text-brand-500', 'dark:text-brand-400', 'bg-brand-50/80', 'dark:bg-brand-500/10 font-semibold');
+            t.classList.remove('text-brand-500', 'dark:text-brand-400', 'bg-brand-50/80', 'dark:bg-brand-500/10', 'font-semibold');
             t.classList.add('text-slate-400', 'dark:text-slate-500');
         });
         
@@ -544,11 +733,15 @@
         if (!task) { speakText('Please describe a task'); return; }
         await runAgentTask(task);
     });
-    document.getElementById('voiceTaskBtn')?.addEventListener('click', () => {
-        if (!authToken) { speakText('Please log in first'); return; }
-        if (recognition && !isListening) recognition.start();
-        else if (recognition && isListening) recognition.stop();
-    });
+    
+    // Voice Key Trigger Binding Array
+    document.getElementById('voiceTaskBtn')?.addEventListener('click', () => toggleVoiceRecognition('agent'));
+    document.getElementById('llmVoiceBtn')?.addEventListener('click', () => toggleVoiceRecognition('direct-llm'));
+
+    // LLM Chat Interface Submissions
+    document.getElementById('llmSendBtn')?.addEventListener('click', triggerDirectLlmMessage);
+    document.getElementById('llmChatInput')?.addEventListener('keydown', (e) => { if (e.key === 'Enter') triggerDirectLlmMessage(); });
+
     document.getElementById('uploadCatalogBtn')?.addEventListener('click', async () => {
         const file = document.getElementById('catalogFile').files[0];
         if (!file) { document.getElementById('uploadResult').innerHTML = '<pre class="text-rose-500 bg-rose-50 dark:bg-rose-950/20 p-3 rounded-xl font-mono mt-2">Select a JSON file</pre>'; return; }
