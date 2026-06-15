@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>VektorFlow</title>
+    <style>
+        body { font-family: monospace; max-width: 800px; margin: auto; padding: 20px; }
+        .key-badge { background: #e0e7ff; padding: 8px; margin: 5px; border-radius: 20px; display: inline-block; }
+        #saved-keys-area { min-height: 80px; border: 2px dashed #ccc; padding: 15px; margin: 20px 0; border-radius: 12px; }
+    </style>
+</head>
+<body>
+    <h1>🔑 VektorFlow Gateway</h1>
+    <div id="saved-keys-area">
+        <strong>✅ Active Providers:</strong>
+        <div id="key-list"></div>
+    </div>
+    <div style="background: #f5f5f5; padding: 20px; border-radius: 12px;">
+        <h3>➕ Add New Provider Key</h3>
+        <a href="/llm">→ Go to LLM Setup Page</a>
+    </div>
+    <script>
+        async function loadKeys() {
+            const res = await fetch('/active-keys');
+            const keys = await res.json();
+            const container = document.getElementById('key-list');
+            if(keys.length === 0) {
+                container.innerHTML = '<i>No keys saved yet — go add one</i>';
+            } else {
+                container.innerHTML = keys.map(k => `<div class="key-badge">✅ ${k}</div>`).join('');
+            }
+        }
+        loadKeys();
+        setInterval(loadKeys, 2000);
+    </script>
+</body>
+</html>
