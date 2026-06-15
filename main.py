@@ -61,3 +61,6 @@ async def list_models(authorization: Optional[str] = Header(None)):
         "object": "list",
         "data": [{"id": m, "object": "model"} for m in PROVIDERS.keys()]
     }
+import uvicorn
+if __name__ == "__main__":
+    uvicorn.run(app, host="0.0.0.0", port=10000)
