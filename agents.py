@@ -1,7 +1,7 @@
 """
 Autonomous Agents - Run tasks, inventory checks, trend detection
 """
-
+from typing import Dict, List, Optional, Any
 import asyncio
 from database import add_task_history, update_task_result, get_user_stores, get_llm_keys
 from llm_handler import call_llm
