@@ -1,0 +1,438 @@
+<!DOCTYPE html>
+<html lang="en" class="scroll-smooth">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
+    <title>VektorFlow 15xr | Full AI Command Center</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        brand: {
+                            50: '#f5f3ff',
+                            100: '#ede9fe',
+                            200: '#ddd6fe',
+                            500: '#7c3aed',
+                            600: '#6d28d9',
+                            700: '#5b21b6',
+                        }
+                    },
+                    fontFamily: {
+                        sans: ['Inter', 'system-ui', 'sans-serif'],
+                    }
+                }
+            }
+        }
+    </script>
+    <!-- Font Awesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        /* Pulse Animation for active voice listening buttons */
+        @keyframes custom-pulse {
+            0% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7); }
+            70% { box-shadow: 0 0 0 15px rgba(16, 185, 129, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); }
+        }
+        .mic-listening {
+            background-color: #10b981 !important;
+            animation: custom-pulse 1.5s infinite;
+        }
+        .custom-scrollbar::-webkit-scrollbar {
+            width: 6px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+            background: #cbd5e1;
+            border-radius: 3px;
+        }
+        .dark .custom-scrollbar::-webkit-scrollbar-thumb {
+            background: #475569;
+        }
+        @keyframes soundWave {
+            0%, 100% { transform: scaleY(0.3); }
+            50% { transform: scaleY(1); }
+        }
+        .wave-bar {
+            animation: soundWave 1.2s ease-in-out infinite;
+        }
+        .wave-bar:nth-child(2) { animation-delay: 0.15s; }
+        .wave-bar:nth-child(3) { animation-delay: 0.3s; }
+        .wave-bar:nth-child(4) { animation-delay: 0.45s; }
+        .wave-bar:nth-child(5) { animation-delay: 0.6s; }
+    </style>
+</head>
+<body class="bg-slate-50 dark:bg-slate-900 font-sans text-slate-800 dark:text-slate-100 transition-colors duration-300 min-h-screen antialiased selection:bg-brand-200">
+
+<!-- LOGIN PAGE -->
+<div id="authPage" class="min-h-screen flex items-center justify-center p-4 bg-gradient-to-br from-slate-50 to-slate-100 dark:from-slate-900 dark:to-slate-950 transition-colors duration-300">
+    <div class="bg-white dark:bg-slate-800 border border-slate-200/80 dark:border-slate-700/80 rounded-3xl p-8 max-w-[420px] w-full shadow-xl shadow-slate-200/50 dark:shadow-none transition-all transform hover:scale-[1.01]">
+        <div class="text-center mb-6">
+            <div class="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-brand-50 dark:bg-brand-500/10 mb-3">
+                <i class="fas fa-bolt text-3xl text-brand-500"></i>
+            </div>
+            <h2 class="text-2xl font-bold tracking-tight text-slate-900 dark:text-white">VektorFlow 15xr</h2>
+            <p class="text-sm text-slate-500 dark:text-slate-400 mt-1">Full AI Command Center</p>
+        </div>
+        
+        <div class="space-y-3">
+            <div>
+                <input type="email" id="loginEmail" class="w-full px-4 py-3 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent transition-all text-sm" placeholder="your@email.com">
+            </div>
+            <div>
+                <input type="password" id="loginPassword" class="w-full px-4 py-3 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent transition-all text-sm" placeholder="Password (min 6 chars)">
+            </div>
+            
+            <button id="signupBtn" class="w-full py-3 px-4 bg-brand-500 hover:bg-brand-600 active:bg-brand-700 text-white font-medium rounded-xl shadow-sm shadow-brand-500/20 transition-all text-sm flex items-center justify-center gap-2">
+                <span>📝 Sign Up (Free Trial)</span>
+            </button>
+            <button id="loginBtn" class="w-full py-3 px-4 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white font-medium rounded-xl shadow-sm shadow-blue-600/20 transition-all text-sm flex items-center justify-center gap-2">
+                <span>🔓 Sign In</span>
+            </button>
+        </div>
+
+        <!-- Social Login Buttons (Placeholders) -->
+        <div class="mt-5 pt-4 border-t border-slate-200 dark:border-slate-700">
+            <div class="text-center mb-3">
+                <span class="text-[11px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider bg-white dark:bg-slate-800 px-2 relative -top-[23px]">Or Connect With</span>
+            </div>
+            <div class="grid grid-cols-3 gap-2.5 -mt-3">
+                <button onclick="alert('Google SSO coming soon')" class="flex items-center justify-center py-2.5 border border-slate-200 dark:border-slate-700 rounded-xl bg-slate-50 dark:bg-slate-900/50 hover:bg-slate-100 dark:hover:bg-slate-700 text-sm transition-all text-slate-700 dark:text-slate-200">
+                    <i class="fab fa-google text-red-500 text-base"></i>
+                </button>
+                <button onclick="alert('Facebook SSO coming soon')" class="flex items-center justify-center py-2.5 border border-slate-200 dark:border-slate-700 rounded-xl bg-slate-50 dark:bg-slate-900/50 hover:bg-slate-100 dark:hover:bg-slate-700 text-sm transition-all text-slate-700 dark:text-slate-200">
+                    <i class="fab fa-facebook text-blue-600 text-base"></i>
+                </button>
+                <button onclick="alert('Apple SSO coming soon')" class="flex items-center justify-center py-2.5 border border-slate-200 dark:border-slate-700 rounded-xl bg-slate-50 dark:bg-slate-900/50 hover:bg-slate-100 dark:hover:bg-slate-700 text-sm transition-all text-slate-700 dark:text-slate-200">
+                    <i class="fab fa-apple text-slate-900 dark:text-white text-base"></i>
+                </button>
+            </div>
+        </div>
+        
+        <div id="authMessage" class="mt-4 text-xs text-center font-medium text-slate-500 dark:text-slate-400 min-h-[16px]"></div>
+    </div>
+</div>
+
+<!-- MAIN DASHBOARD -->
+<div id="dashboardContainer" class="hidden min-h-screen flex-col bg-slate-50 dark:bg-slate-900 transition-colors duration-300">
+    
+    <!-- Top Bar -->
+    <header class="bg-white/80 dark:bg-slate-800/80 backdrop-blur-md border-b border-slate-200/80 dark:border-slate-700/80 px-4 md:px-8 py-3.5 sticky top-0 z-50 flex justify-between items-center transition-colors duration-300">
+        <div class="flex items-center gap-2.5">
+            <i class="fas fa-bolt text-xl text-brand-500"></i>
+            <span class="font-bold text-slate-900 dark:text-white tracking-tight">VektorFlow 15xr</span>
+            <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-emerald-50 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 tracking-wider ml-1" id="statusBadge">● ONLINE</span>
+        </div>
+        <div class="flex items-center gap-4">
+            <div id="globalVoiceWave" class="hidden items-center gap-0.5 px-3 py-1.5 bg-emerald-50 dark:bg-emerald-500/10 rounded-xl border border-emerald-200/30">
+                <span class="text-[10px] text-emerald-600 dark:text-emerald-400 font-bold tracking-wider uppercase mr-1.5">Listening</span>
+                <div class="wave-bar w-0.5 h-3.5 bg-emerald-500 rounded-full origin-bottom"></div>
+                <div class="wave-bar w-0.5 h-3.5 bg-emerald-500 rounded-full origin-bottom"></div>
+                <div class="wave-bar w-0.5 h-3.5 bg-emerald-500 rounded-full origin-bottom"></div>
+                <div class="wave-bar w-0.5 h-3.5 bg-emerald-500 rounded-full origin-bottom"></div>
+                <div class="wave-bar w-0.5 h-3.5 bg-emerald-500 rounded-full origin-bottom"></div>
+            </div>
+            <span id="userEmailDisplay" class="text-xs font-medium text-slate-500 dark:text-slate-400 hidden sm:inline"></span>
+            <button id="themeToggle" class="p-2 text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-xl transition-all">
+                <i class="fas fa-moon dark:hidden text-lg"></i>
+                <i class="fas fa-sun hidden dark:block text-lg"></i>
+            </button>
+            <button id="logoutBtn" class="p-2 border border-rose-200 dark:border-rose-900/30 text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/30 rounded-xl transition-all text-sm flex items-center justify-center w-9 h-9">
+                <i class="fas fa-sign-out-alt"></i>
+            </button>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="flex-grow px-4 md:px-8 py-6 max-w-6xl w-full mx-auto pb-24 md:pb-12">
+        
+        <!-- HOME PAGE -->
+        <div id="homePage" class="page-section hidden">
+            <!-- Stats Grid -->
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+                <div class="bg-white dark:bg-slate-800 border border-slate-200/60 dark:border-slate-700/60 rounded-2xl p-4 shadow-sm">
+                    <div class="text-slate-400 dark:text-slate-500 font-medium text-xs uppercase tracking-wider">Products</div>
+                    <div class="text-3xl font-bold text-brand-500 mt-1" id="statProducts">0</div>
+                </div>
+                <div class="bg-white dark:bg-slate-800 border border-slate-200/60 dark:border-slate-700/60 rounded-2xl p-4 shadow-sm">
+                    <div class="text-slate-400 dark:text-slate-500 font-medium text-xs uppercase tracking-wider">Campaigns</div>
+                    <div class="text-3xl font-bold text-brand-500 mt-1" id="statCampaigns">2</div>
+                </div>
+                <div class="bg-white dark:bg-slate-800 border border-slate-200/60 dark:border-slate-700/60 rounded-2xl p-4 shadow-sm">
+                    <div class="text-slate-400 dark:text-slate-500 font-medium text-xs uppercase tracking-wider">Agents</div>
+                    <div class="text-3xl font-bold text-brand-500 mt-1" id="statAgents">15</div>
+                </div>
+                <div class="bg-white dark:bg-slate-800 border border-slate-200/60 dark:border-slate-700/60 rounded-2xl p-4 shadow-sm">
+                    <div class="text-slate-400 dark:text-slate-500 font-medium text-xs uppercase tracking-wider">Memories</div>
+                    <div class="text-3xl font-bold text-brand-500 mt-1" id="statMemories">0</div>
+                </div>
+            </div>
+
+            <!-- LLM Provider Keys Section (Bring Your Own Key) -->
+            <div class="bg-white dark:bg-slate-800 border border-slate-200/60 dark:border-slate-700/60 rounded-2xl p-5 shadow-sm mb-6">
+                <h5 class="text-base font-bold text-slate-900 dark:text-white flex items-center mb-4">
+                    <i class="fas fa-key text-brand-500 mr-2.5"></i>🔐 Your LLM Provider Keys (Bring Your Own)
+                </h5>
+                <div class="space-y-3" id="llmKeysContainer">
+                    <div class="grid grid-cols-2 gap-2 text-xs text-slate-500 dark:text-slate-400 mb-2">
+                        <span>Provider</span>
+                        <span>API Key</span>
+                    </div>
+                    <!-- Providers will be loaded dynamically -->
+                </div>
+                <div id="keysMessage" class="mt-3 text-xs"></div>
+            </div>
+
+            <!-- Store Connection Section -->
+            <div class="bg-white dark:bg-slate-800 border border-slate-200/60 dark:border-slate-700/60 rounded-2xl p-5 shadow-sm mb-6">
+                <h5 class="text-base font-bold text-slate-900 dark:text-white flex items-center mb-4">
+                    <i class="fas fa-store text-brand-500 mr-2.5"></i>🏪 Connect Your Dropshipping Store
+                </h5>
+                <div class="space-y-3">
+                    <select id="storePlatform" class="w-full px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-sm">
+                        <option value="cjdropshipping">CJ Dropshipping</option>
+                    </select>
+                    <input type="text" id="storeApiKey" placeholder="API Key" class="w-full px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-sm">
+                    <input type="password" id="storeApiSecret" placeholder="API Secret (if required)" class="w-full px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-sm">
+                    <input type="text" id="storeUrl" placeholder="Store URL (optional)" class="w-full px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-sm">
+                    <button id="connectStoreBtn" class="w-full py-2 bg-brand-500 hover:bg-brand-600 text-white font-medium rounded-xl text-sm transition-all">Connect Store</button>
+                    <div id="storeConnectionMsg" class="text-xs"></div>
+                </div>
+            </div>
+
+            <!-- AI Model Selection -->
+            <h5 class="text-sm font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-3 flex items-center">
+                <i class="fas fa-microchip mr-2"></i>Active AI Model
+            </h5>
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6" id="aiModelSelector">
+                <!-- Models loaded dynamically -->
+            </div>
+
+            <!-- Task Assignment -->
+            <h5 class="text-sm font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-3 flex items-center">
+                <i class="fas fa-tasks mr-2"></i>Assign Task to AI Agent
+            </h5>
+            <div class="bg-white dark:bg-slate-800 border border-slate-200/60 dark:border-slate-700/60 rounded-2xl p-5 shadow-sm mb-6">
+                <div class="space-y-4">
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1.5">Select Agent</label>
+                        <select id="agentSelect" class="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-sm">
+                            <option value="Market Research Agent">Market Research Agent</option>
+                            <option value="Trend Analysis Agent">Trend Analysis Agent</option>
+                            <option value="Content Writer Agent">Content Writer Agent</option>
+                            <option value="Campaign Optimizer">Campaign Optimizer</option>
+                            <option value="Data Analyst Agent">Data Analyst Agent</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1.5">Task Description</label>
+                        <textarea id="agentTaskInput" rows="2" class="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-sm" placeholder="Describe the task... e.g., Find top 5 trending products on TikTok right now"></textarea>
+                    </div>
+                    <div class="flex gap-2.5">
+                        <button id="assignTaskBtn" class="flex-grow py-3 px-4 bg-brand-500 hover:bg-brand-600 text-white text-sm font-medium rounded-xl transition-all flex items-center justify-center gap-2">
+                            <i class="fas fa-rocket"></i> <span>Assign Task</span>
+                        </button>
+                        <button id="voiceTaskBtn" class="w-12 h-12 bg-brand-500 hover:bg-brand-600 text-white rounded-xl flex items-center justify-center text-base transition-all flex-shrink-0">
+                            <i class="fas fa-microphone"></i>
+                        </button>
+                    </div>
+                    <div id="taskStatus" class="text-xs font-medium text-slate-400 dark:text-slate-500 mt-1 min-h-[16px]"></div>
+                </div>
+            </div>
+
+            <!-- Task Results -->
+            <h5 class="text-sm font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-3 flex items-center">
+                <i class="fas fa-clipboard-list mr-2"></i>Task Results
+            </h5>
+            <div id="taskResultsContainer" class="bg-white dark:bg-slate-800 border border-slate-200/60 dark:border-slate-700/60 rounded-2xl p-4 shadow-sm max-h-[400px] overflow-y-auto custom-scrollbar space-y-3">
+                <div class="text-slate-400 dark:text-slate-500 text-xs text-center py-6 font-medium">Tasks you run will appear here with full results</div>
+            </div>
+        </div>
+
+        <!-- LLM PAGE (Dedicated Chat Interface) -->
+        <div id="llmPage" class="page-section hidden">
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <!-- Sidebar Controls -->
+                <div class="md:col-span-1 space-y-4">
+                    <div class="bg-white dark:bg-slate-800 border border-slate-200/60 dark:border-slate-700/60 rounded-2xl p-5 shadow-sm">
+                        <h5 class="text-sm font-bold text-slate-900 dark:text-white flex items-center mb-3">
+                            <i class="fas fa-sliders-h text-brand-500 mr-2"></i>Context Configuration
+                        </h5>
+                        <div class="space-y-3">
+                            <div>
+                                <label class="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">System Prompt Context</label>
+                                <textarea id="llmSystemPrompt" rows="4" class="w-full px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-xs" placeholder="You are a helpful AI assistant for e-commerce..."></textarea>
+                            </div>
+                            <div>
+                                <label class="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Temperature</label>
+                                <input type="range" id="llmTemperature" min="0" max="1" step="0.1" value="0.7" class="w-full accent-brand-500">
+                            </div>
+                            <div>
+                                <label class="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Model</label>
+                                <select id="llmModelSelect" class="w-full px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-xs">
+                                    <option value="llama-3.3-70b-versatile">Llama 3.3 70B</option>
+                                    <option value="mistral-large-latest">Mistral Large</option>
+                                    <option value="deepseek-chat">DeepSeek Chat</option>
+                                    <option value="command-r-plus">Cohere Command R+</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Chat Interface -->
+                <div class="md:col-span-2 flex flex-col bg-white dark:bg-slate-800 border border-slate-200/60 dark:border-slate-700/60 rounded-2xl shadow-sm h-[500px]">
+                    <div class="p-4 border-b border-slate-100 dark:border-slate-700/50 flex justify-between items-center">
+                        <span class="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                            <i class="fas fa-brain text-brand-500"></i> Direct LLM Chat
+                        </span>
+                        <button onclick="document.getElementById('llmChatStream').innerHTML = '<div class=\"text-slate-400 text-xs text-center py-6\">Chat cleared. Start a new conversation.</div>';" class="text-xs text-slate-400 hover:text-rose-500 transition-colors">
+                            <i class="fas fa-trash-alt mr-1"></i> Clear
+                        </button>
+                    </div>
+                    
+                    <div id="llmChatStream" class="flex-grow p-4 overflow-y-auto custom-scrollbar space-y-3 text-xs">
+                        <div class="bg-slate-50 dark:bg-slate-900/50 p-3 rounded-xl border border-slate-100 dark:border-slate-800 max-w-[85%]">
+                            <p class="font-bold text-brand-500 mb-0.5">System</p>
+                            <p class="text-slate-600 dark:text-slate-300 leading-relaxed">Ready. Select a model and start chatting.</p>
+                        </div>
+                    </div>
+
+                    <div class="p-3 border-t border-slate-100 dark:border-slate-700/50 bg-slate-50/50 dark:bg-slate-900/20 rounded-b-2xl">
+                        <div class="flex gap-2">
+                            <input type="text" id="llmChatInput" class="flex-grow px-3.5 py-2.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-brand-500" placeholder="Type your message...">
+                            <button id="llmVoiceBtn" class="w-10 h-10 bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 rounded-xl flex items-center justify-center text-sm transition-all hover:bg-slate-200 dark:hover:bg-slate-600">
+                                <i class="fas fa-microphone"></i>
+                            </button>
+                            <button id="llmSendBtn" class="w-10 h-10 bg-brand-500 hover:bg-brand-600 text-white rounded-xl flex items-center justify-center text-sm transition-all">
+                                <i class="fas fa-paper-plane"></i>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- CATALOG PAGE -->
+        <div id="catalogPage" class="page-section hidden">
+            <div class="bg-white dark:bg-slate-800 border border-slate-200/60 dark:border-slate-700/60 rounded-2xl p-5 shadow-sm">
+                <h5 class="text-base font-bold text-slate-900 dark:text-white flex items-center mb-4">
+                    <i class="fas fa-upload text-brand-500 mr-2.5"></i>Upload Product Catalog
+                </h5>
+                <div class="space-y-4">
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1.5">Select JSON Catalog File</label>
+                        <input type="file" id="catalogFile" class="w-full text-sm" accept=".json">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1.5">Store Designation ID</label>
+                        <input type="text" id="storeId" class="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-sm" placeholder="Store ID" value="test-store">
+                    </div>
+                    <button id="uploadCatalogBtn" class="w-full py-2.5 px-4 bg-brand-500 hover:bg-brand-600 text-white font-medium rounded-xl text-sm shadow-sm transition-all">Upload</button>
+                    <div id="uploadResult" class="mt-2 text-xs"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- AGENTS PAGE -->
+        <div id="agentsPage" class="page-section hidden">
+            <div class="bg-white dark:bg-slate-800 border border-slate-200/60 dark:border-slate-700/60 rounded-2xl p-5 shadow-sm">
+                <h5 class="text-base font-bold text-slate-900 dark:text-white flex items-center mb-3">
+                    <i class="fas fa-robot text-brand-500 mr-2.5"></i>AI Agents Status
+                </h5>
+                <div id="agentsList" class="divide-y divide-slate-100 dark:divide-slate-700/50">
+                    <div class="flex justify-between items-center py-3"><span class="text-sm">Market Research Agent</span><span class="badge-idle">Idle</span></div>
+                    <div class="flex justify-between items-center py-3"><span class="text-sm">Trend Analysis Agent</span><span class="badge-idle">Idle</span></div>
+                    <div class="flex justify-between items-center py-3"><span class="text-sm">Content Writer Agent</span><span class="badge-idle">Idle</span></div>
+                    <div class="flex justify-between items-center py-3"><span class="text-sm">Campaign Optimizer</span><span class="badge-idle">Idle</span></div>
+                    <div class="flex justify-between items-center py-3"><span class="text-sm">Data Analyst Agent</span><span class="badge-idle">Idle</span></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- CAMPAIGNS PAGE -->
+        <div id="campaignsPage" class="page-section hidden">
+            <div class="space-y-4">
+                <div class="bg-white dark:bg-slate-800 border border-slate-200/60 dark:border-slate-700/60 rounded-2xl p-5 shadow-sm">
+                    <h5 class="text-base font-bold text-slate-900 dark:text-white flex items-center mb-3">
+                        <i class="fas fa-fire text-brand-500 mr-2.5"></i>Trending Products
+                    </h5>
+                    <button id="getTrendsBtn" class="w-full py-2.5 px-4 bg-brand-500 hover:bg-brand-600 text-white font-medium rounded-xl text-sm shadow-sm transition-all">🔥 Get Trends</button>
+                    <div id="trendsResult" class="mt-3 text-xs"></div>
+                </div>
+                <div class="bg-white dark:bg-slate-800 border border-slate-200/60 dark:border-slate-700/60 rounded-2xl p-5 shadow-sm">
+                    <h5 class="text-base font-bold text-slate-900 dark:text-white flex items-center mb-4">
+                        <i class="fas fa-chart-line text-brand-500 mr-2.5"></i>Generate Campaign
+                    </h5>
+                    <div class="space-y-3">
+                        <div>
+                            <input type="text" id="campaignProductName" class="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-sm" placeholder="Product name">
+                        </div>
+                        <button id="generateCampaignBtn" class="w-full py-2.5 px-4 bg-brand-500 hover:bg-brand-600 text-white font-medium rounded-xl text-sm shadow-sm transition-all">Generate Campaign</button>
+                        <div id="campaignResult" class="mt-3 text-xs"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Footer -->
+        <footer class="mt-12 pt-6 border-t border-slate-200/60 dark:border-slate-800 text-center space-y-2 transition-colors duration-300 max-w-2xl mx-auto">
+            <p class="text-[11px] leading-relaxed text-slate-400 dark:text-slate-500 font-medium">
+                ⚠️ AI outputs are machine-generated. Do not rely on them for legal, medical, or financial decisions.
+            </p>
+            <div class="text-[11px] font-semibold text-slate-400 dark:text-slate-500 space-x-2">
+                <a href="/static/legal.html" class="text-brand-500 hover:text-brand-600 transition-colors">Privacy Policy</a>
+                <span>•</span>
+                <a href="mailto:commander@vektorflow.com" class="text-brand-500 hover:text-brand-600 transition-colors">Contact</a>
+            </div>
+        </footer>
+    </main>
+
+    <!-- Bottom Navigation -->
+    <nav class="fixed bottom-0 left-0 right-0 bg-white/90 dark:bg-slate-800/90 backdrop-blur-lg border-t border-slate-200/80 dark:border-slate-700/50 flex justify-around p-2 z-50 transition-colors duration-300 shadow-lg">
+        <button class="nav-tab flex flex-col items-center gap-0.5 py-1 px-3.5 rounded-xl text-[11px] font-medium transition-all" data-page="home"><i class="fas fa-home text-base"></i><span>Home</span></button>
+        <button class="nav-tab flex flex-col items-center gap-0.5 py-1 px-3.5 rounded-xl text-[11px] font-medium transition-all" data-page="llm"><i class="fas fa-brain text-base"></i><span>LLM</span></button>
+        <button class="nav-tab flex flex-col items-center gap-0.5 py-1 px-3.5 rounded-xl text-[11px] font-medium transition-all" data-page="catalog"><i class="fas fa-box text-base"></i><span>Catalog</span></button>
+        <button class="nav-tab flex flex-col items-center gap-0.5 py-1 px-3.5 rounded-xl text-[11px] font-medium transition-all" data-page="agents"><i class="fas fa-robot text-base"></i><span>Agents</span></button>
+        <button class="nav-tab flex flex-col items-center gap-0.5 py-1 px-3.5 rounded-xl text-[11px] font-medium transition-all" data-page="campaigns"><i class="fas fa-chart-line text-base"></i><span>Campaigns</span></button>
+    </nav>
+</div>
+
+<script>
+    const BASE = window.location.origin;
+    let authToken = localStorage.getItem('authToken');
+    let selectedModel = localStorage.getItem('selectedModel') || 'llama-3.3-70b-versatile';
+    let currentStoreId = 'test-store';
+    let recognition = null;
+    let isListening = false;
+    let activeVoiceTarget = 'agent';
+    let synth = window.speechSynthesis;
+
+    // Dark Mode Toggle
+    const themeToggleBtn = document.getElementById('themeToggle');
+    if (localStorage.getItem('theme') === 'dark' || (!('theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+        document.documentElement.classList.add('dark');
+    } else {
+        document.documentElement.classList.remove('dark');
+    }
+    themeToggleBtn?.addEventListener('click', () => {
+        document.documentElement.classList.toggle('dark');
+        localStorage.setItem('theme', document.documentElement.classList.contains('dark') ? 'dark' : 'light');
+    });
+
+    // ========== API CALL ==========
+    async function callApi(endpoint, method = 'GET', body = null) {
+        const headers = { 'Content-Type': 'application/json' };
+        if (authToken) headers['api-key'] = authToken;
+        const res = await fetch(`${BASE}${endpoint}`, { method, headers, body: body ? JSON.stringify(body) : undefined });
+        const data = await res.json();
+        return { res, data };
+    }
+
+    // ========== LOAD LLM PROVIDERS AND KEYS ==========
+    async function load
