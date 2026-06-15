@@ -4,7 +4,7 @@ Universal LLM Handler - Supports any provider with bring-your-own-key
 
 import os
 import httpx
-from typing import Dict, Optional
+from typing import Dict, Optional, Any
 
 # Provider API endpoints (OpenAI-compatible where possible)
 PROVIDER_CONFIG = {
