@@ -4,7 +4,7 @@ Store Manager - Handles CJ Dropshipping and other store integrations
 
 import os
 import httpx
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Any
 
 CJ_MCP_URL = os.environ.get("CJ_MCP_URL", "https://api-mcp-7ojz.onrender.com")
 
