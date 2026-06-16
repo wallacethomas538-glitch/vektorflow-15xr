@@ -1,0 +1,662 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
+    <title>VektorFlow 15xr | AI Command Center</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: { brand: { 500: '#7c3aed', 600: '#6d28d9' } }
+                }
+            }
+        }
+    </script>
+    <style>
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        .animate-fade-in { animation: fadeIn 0.3s ease-out; }
+        .gtm-card { transition: all 0.2s; }
+        .gtm-card:hover { transform: translateY(-2px); box-shadow: 0 8px 25px rgba(124,58,237,0.15); }
+        .toast { position: fixed; top: 1rem; right: 1rem; z-index: 1000; max-width: 400px; padding: 1rem; border-radius: 0.75rem; box-shadow: 0 10px 40px rgba(0,0,0,0.2); animation: fadeIn 0.3s ease-out; }
+        .toast-success { background: #10b981; color: white; }
+        .toast-error { background: #ef4444; color: white; }
+        .toast-warning { background: #f59e0b; color: white; }
+        .toast-info { background: #3b82f6; color: white; }
+        .vektor-message-user { background: #7c3aed; color: white; border-radius: 18px 18px 4px 18px; padding: 0.75rem 1rem; max-width: 80%; align-self: flex-end; }
+        .vektor-message-ai { background: #f1f5f9; color: #1e293b; border-radius: 18px 18px 18px 4px; padding: 0.75rem 1rem; max-width: 80%; align-self: flex-start; border-left: 3px solid #7c3aed; }
+        .dark .vektor-message-ai { background: #1e293b; color: #e2e8f0; }
+        .memory-chip { background: #7c3aed10; border: 1px solid #7c3aed20; border-radius: 20px; padding: 0.2rem 0.8rem; font-size: 0.65rem; color: #7c3aed; }
+        .commander-badge { background: #f59e0b; color: #1a1a2e; padding: 0.1rem 0.6rem; border-radius: 12px; font-size: 0.6rem; font-weight: bold; text-transform: uppercase; letter-spacing: 0.5px; }
+    </style>
+</head>
+<body class="bg-slate-50 dark:bg-slate-900 font-sans">
+
+<!-- ===== AUTH PAGE ===== -->
+<div id="authPage" class="min-h-screen flex items-center justify-center p-4 bg-gradient-to-br from-slate-50 to-slate-100 dark:from-slate-900 dark:to-slate-950">
+    <div class="bg-white dark:bg-slate-800 border border-slate-200/80 dark:border-slate-700/80 rounded-3xl p-8 max-w-[450px] w-full shadow-xl animate-fade-in">
+        <div class="text-center mb-8">
+            <div class="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-brand-50 dark:bg-brand-500/10 mb-4">
+                <i class="fas fa-bolt text-3xl text-brand-500"></i>
+            </div>
+            <h2 class="text-2xl font-bold tracking-tight text-slate-900 dark:text-white">VektorFlow 15xr</h2>
+            <p class="text-sm text-slate-500 dark:text-slate-400 mt-1">Connect your store to start your 7-day free trial</p>
+            <div class="mt-2 inline-flex items-center gap-1 text-xs text-amber-500"><i class="fas fa-crown"></i> <span class="commander-badge">Commander Login Available</span></div>
+        </div>
+
+        <div class="space-y-4">
+            <div>
+                <label class="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">Your Store URL</label>
+                <input type="url" id="storeUrl" class="w-full px-4 py-3 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand-500" placeholder="https://yourstore.myshopify.com">
+            </div>
+            <div>
+                <label class="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">Platform</label>
+                <select id="platformSelect" class="w-full px-4 py-3 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand-500">
+                    <option value="shopify">Shopify</option>
+                    <option value="woocommerce">WooCommerce</option>
+                    <option value="cjdropshipping">CJ Dropshipping</option>
+                </select>
+            </div>
+            <button id="connectStoreBtn" class="w-full py-3 px-4 bg-brand-500 hover:bg-brand-600 text-white font-medium rounded-xl transition-all flex items-center justify-center gap-2 mt-4">
+                <i class="fas fa-link"></i> <span>Connect Store & Start Trial</span>
+            </button>
+        </div>
+
+        <!-- Commander Quick Login -->
+        <div class="mt-4 pt-4 border-t border-slate-200 dark:border-slate-700">
+            <div class="text-center mb-2">
+                <span class="text-xs text-slate-400">Or</span>
+            </div>
+            <a href="/commander-dashboard" class="w-full py-2.5 px-4 bg-amber-500 hover:bg-amber-600 text-white font-medium rounded-xl transition-all flex items-center justify-center gap-2 text-sm">
+                <i class="fas fa-crown"></i> <span>Commander Login (Direct)</span>
+            </a>
+        </div>
+
+        <div id="authMessage" class="mt-4 text-xs text-center text-slate-500 dark:text-slate-400 min-h-[16px]"></div>
+        <div class="mt-4 pt-4 border-t border-slate-200 dark:border-slate-700 text-center">
+            <p class="text-[11px] text-slate-400">By connecting your store, you agree to a 7-day free trial.</p>
+        </div>
+    </div>
+</div>
+
+<!-- ===== DASHBOARD ===== -->
+<div id="dashboardContainer" class="hidden min-h-screen flex-col bg-slate-50 dark:bg-slate-900">
+    <!-- TOP BAR -->
+    <header class="bg-white/80 dark:bg-slate-800/80 backdrop-blur-md border-b border-slate-200/80 dark:border-slate-700/80 px-4 md:px-8 py-3.5 sticky top-0 z-50 flex justify-between items-center">
+        <div class="flex items-center gap-2.5">
+            <i class="fas fa-bolt text-xl text-brand-500"></i>
+            <span class="font-bold text-slate-900 dark:text-white">VektorFlow 15xr</span>
+            <span id="commanderBadge" class="hidden inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-amber-500 text-white">👑 COMMANDER</span>
+            <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium" id="trialBadge">● 7 DAYS LEFT</span>
+            <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-emerald-50 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400" id="statusBadge">● ONLINE</span>
+        </div>
+        <div class="flex items-center gap-4">
+            <span id="storeDisplay" class="text-xs font-medium text-slate-500 dark:text-slate-400 hidden sm:inline"></span>
+            <button id="themeToggle" class="p-2 text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-xl transition-all">
+                <i class="fas fa-moon dark:hidden text-lg"></i>
+                <i class="fas fa-sun hidden dark:block text-lg"></i>
+            </button>
+            <a href="/commander/control" id="controlPanelBtn" class="hidden px-3 py-1.5 bg-amber-500 hover:bg-amber-600 text-white text-xs font-medium rounded-lg transition-all">Control Panel</a>
+            <button id="upgradeBtn" class="px-3 py-1.5 bg-amber-500 hover:bg-amber-600 text-white text-xs font-medium rounded-lg transition-all hidden">Upgrade</button>
+            <button id="logoutBtn" class="p-2 border border-rose-200 dark:border-rose-900/30 text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/30 rounded-xl transition-all">
+                <i class="fas fa-sign-out-alt"></i>
+            </button>
+        </div>
+    </header>
+
+    <!-- MAIN CONTENT -->
+    <main class="flex-grow px-4 md:px-8 py-6 max-w-6xl w-full mx-auto pb-24">
+
+        <!-- ===== HOME PAGE ===== -->
+        <div id="homePage" class="page-section active-page">
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+                <div class="bg-white dark:bg-slate-800 rounded-2xl p-4 shadow-sm border border-slate-200/60 dark:border-slate-700/60">
+                    <div class="text-slate-400 dark:text-slate-500 text-xs uppercase tracking-wider">Products</div>
+                    <div class="text-2xl font-bold text-brand-500" id="statProducts">0</div>
+                </div>
+                <div class="bg-white dark:bg-slate-800 rounded-2xl p-4 shadow-sm border border-slate-200/60 dark:border-slate-700/60">
+                    <div class="text-slate-400 dark:text-slate-500 text-xs uppercase tracking-wider">Campaigns</div>
+                    <div class="text-2xl font-bold text-brand-500" id="statCampaigns">2</div>
+                </div>
+                <div class="bg-white dark:bg-slate-800 rounded-2xl p-4 shadow-sm border border-slate-200/60 dark:border-slate-700/60">
+                    <div class="text-slate-400 dark:text-slate-500 text-xs uppercase tracking-wider">Agents</div>
+                    <div class="text-2xl font-bold text-brand-500" id="statAgents">15</div>
+                </div>
+                <div class="bg-white dark:bg-slate-800 rounded-2xl p-4 shadow-sm border border-slate-200/60 dark:border-slate-700/60">
+                    <div class="text-slate-400 dark:text-slate-500 text-xs uppercase tracking-wider">Memories</div>
+                    <div class="text-2xl font-bold text-brand-500" id="statMemories">0</div>
+                </div>
+            </div>
+
+            <!-- API KEYS -->
+            <div class="bg-white dark:bg-slate-800 rounded-2xl p-5 shadow-sm border border-slate-200/60 dark:border-slate-700/60 mb-6">
+                <h5 class="text-base font-bold flex items-center gap-2 mb-4"><i class="fas fa-key text-brand-500"></i> Your API Keys</h5>
+                <div id="providerKeysContainer" class="space-y-3">
+                    <div class="flex flex-col sm:flex-row gap-2 items-start sm:items-center"><label class="text-xs font-semibold text-slate-500 dark:text-slate-400 w-24 flex-shrink-0">Groq</label><input type="password" id="key_groq" class="flex-grow w-full px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-sm" placeholder="gsk_..."><button onclick="saveProviderKey('groq')" class="px-3 py-1.5 bg-brand-500 hover:bg-brand-600 text-white text-xs rounded-lg transition-all">Save</button></div>
+                    <div class="flex flex-col sm:flex-row gap-2 items-start sm:items-center"><label class="text-xs font-semibold text-slate-500 dark:text-slate-400 w-24 flex-shrink-0">DeepSeek</label><input type="password" id="key_deepseek" class="flex-grow w-full px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-sm" placeholder="sk-..."><button onclick="saveProviderKey('deepseek')" class="px-3 py-1.5 bg-brand-500 hover:bg-brand-600 text-white text-xs rounded-lg transition-all">Save</button></div>
+                    <div class="flex flex-col sm:flex-row gap-2 items-start sm:items-center"><label class="text-xs font-semibold text-slate-500 dark:text-slate-400 w-24 flex-shrink-0">Gemini</label><input type="password" id="key_gemini" class="flex-grow w-full px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-sm" placeholder="AIza..."><button onclick="saveProviderKey('gemini')" class="px-3 py-1.5 bg-brand-500 hover:bg-brand-600 text-white text-xs rounded-lg transition-all">Save</button></div>
+                    <div class="flex flex-col sm:flex-row gap-2 items-start sm:items-center"><label class="text-xs font-semibold text-slate-500 dark:text-slate-400 w-24 flex-shrink-0">Hugging Face</label><input type="password" id="key_huggingface" class="flex-grow w-full px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-sm" placeholder="hf_..."><button onclick="saveProviderKey('huggingface')" class="px-3 py-1.5 bg-brand-500 hover:bg-brand-600 text-white text-xs rounded-lg transition-all">Save</button></div>
+                    <div class="flex flex-col sm:flex-row gap-2 items-start sm:items-center"><label class="text-xs font-semibold text-slate-500 dark:text-slate-400 w-24 flex-shrink-0">OpenAI</label><input type="password" id="key_openai" class="flex-grow w-full px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-sm" placeholder="sk-..."><button onclick="saveProviderKey('openai')" class="px-3 py-1.5 bg-brand-500 hover:bg-brand-600 text-white text-xs rounded-lg transition-all">Save</button></div>
+                    <div class="flex flex-col sm:flex-row gap-2 items-start sm:items-center"><label class="text-xs font-semibold text-slate-500 dark:text-slate-400 w-24 flex-shrink-0">Anthropic</label><input type="password" id="key_anthropic" class="flex-grow w-full px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-sm" placeholder="sk-ant-..."><button onclick="saveProviderKey('anthropic')" class="px-3 py-1.5 bg-brand-500 hover:bg-brand-600 text-white text-xs rounded-lg transition-all">Save</button></div>
+                </div>
+                <div id="keysMessage" class="mt-3 text-xs"></div>
+            </div>
+
+            <!-- AI MODEL SELECTOR -->
+            <h5 class="text-sm font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-3"><i class="fas fa-microchip mr-2"></i>Select AI Model</h5>
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6" id="aiModelSelector">
+                <div class="text-slate-400 text-xs col-span-full text-center py-4">Add an API key to see models</div>
+            </div>
+
+            <!-- AGENT TASKS -->
+            <h5 class="text-sm font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-3"><i class="fas fa-tasks mr-2"></i>Assign Task to AI Agent</h5>
+            <div class="bg-white dark:bg-slate-800 rounded-2xl p-5 shadow-sm border border-slate-200/60 dark:border-slate-700/60 mb-6">
+                <div class="space-y-4">
+                    <div><label class="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1.5">Select Agent</label><select id="agentSelect" class="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-sm"><option value="Market Research Agent">Market Research</option><option value="Trend Analysis Agent">Trend Analysis</option><option value="Content Writer Agent">Content Writer</option><option value="Campaign Optimizer">Campaign Optimizer</option><option value="Data Analyst Agent">Data Analyst</option></select></div>
+                    <div><label class="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1.5">Task Description</label><textarea id="agentTaskInput" rows="2" class="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-sm" placeholder="Describe the task..."></textarea></div>
+                    <div class="flex gap-2.5"><button id="assignTaskBtn" class="flex-grow py-3 px-4 bg-brand-500 hover:bg-brand-600 text-white text-sm font-medium rounded-xl transition-all"><i class="fas fa-rocket"></i> Assign Task</button><button id="voiceTaskBtn" class="w-12 h-12 bg-brand-500 hover:bg-brand-600 text-white rounded-xl flex items-center justify-center"><i class="fas fa-microphone"></i></button></div>
+                    <div id="taskStatus" class="text-xs font-medium text-slate-400 dark:text-slate-500 min-h-[16px]"></div>
+                </div>
+            </div>
+
+            <!-- TASK RESULTS -->
+            <h5 class="text-sm font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-3"><i class="fas fa-clipboard-list mr-2"></i>Task Results</h5>
+            <div id="taskResultsContainer" class="bg-white dark:bg-slate-800 border border-slate-200/60 dark:border-slate-700/60 rounded-2xl p-4 shadow-sm max-h-[400px] overflow-y-auto space-y-3">
+                <div class="text-slate-400 dark:text-slate-500 text-xs text-center py-6">Tasks will appear here</div>
+            </div>
+        </div>
+
+        <!-- ===== VEKTOR PAGE ===== -->
+        <div id="vektorPage" class="page-section hidden">
+            <div class="bg-white dark:bg-slate-800 rounded-2xl p-5 shadow-sm border border-slate-200/60 dark:border-slate-700/60 h-[650px] flex flex-col">
+                <div class="flex items-center justify-between mb-4">
+                    <div class="flex items-center gap-3">
+                        <div class="w-10 h-10 rounded-full bg-brand-500 flex items-center justify-center text-white font-bold text-lg">V</div>
+                        <div>
+                            <h5 class="font-bold text-slate-900 dark:text-white">Vektor</h5>
+                            <span class="text-xs text-emerald-500">● Online</span>
+                        </div>
+                    </div>
+                    <div class="flex items-center gap-3">
+                        <span class="memory-chip"><i class="fas fa-brain mr-1"></i> <span id="memoryCount">0</span> memories</span>
+                        <button onclick="clearAllMemory()" class="text-xs text-rose-500 hover:text-rose-600 transition-colors" title="Clear all memories"><i class="fas fa-trash-alt"></i></button>
+                        <button onclick="document.getElementById('vektorMessages').innerHTML = '<div class=\"text-slate-400 text-xs text-center py-8\">Conversation cleared. Ask Vektor anything.</div>'" class="text-xs text-slate-400 hover:text-rose-500 transition-colors"><i class="fas fa-eraser"></i></button>
+                    </div>
+                </div>
+
+                <div id="vektorMessages" class="flex-1 overflow-y-auto space-y-3 mb-4 p-2 bg-slate-50 dark:bg-slate-900/30 rounded-xl">
+                    <div class="vektor-message-ai">👋 Hello Commander! I'm Vektor, your personal AI assistant with permanent memory. I remember everything you tell me. What would you like to do today?</div>
+                </div>
+
+                <div class="flex gap-2">
+                    <input type="text" id="vektorInput" class="flex-grow px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-sm" placeholder="Ask Vektor anything..." onkeydown="if(event.key==='Enter') sendVektorMessage()">
+                    <button id="vektorVoiceBtn" class="px-3 py-2 bg-brand-500 text-white rounded-lg hover:bg-brand-600 transition-colors"><i class="fas fa-microphone"></i></button>
+                    <button id="vektorSendBtn" class="px-4 py-2 bg-emerald-500 text-white rounded-lg hover:bg-emerald-600 transition-colors"><i class="fas fa-paper-plane"></i></button>
+                </div>
+                <div id="vektorStatus" class="text-xs text-slate-400 mt-2 min-h-[20px]"></div>
+                <div class="text-[10px] text-slate-400 mt-1 flex gap-3 flex-wrap">
+                    <span><kbd class="px-1 bg-slate-200 dark:bg-slate-700 rounded">Hey Vektor</kbd> wake word</span>
+                    <span><kbd class="px-1 bg-slate-200 dark:bg-slate-700 rounded">Remember that...</kbd> store facts</span>
+                    <span><kbd class="px-1 bg-slate-200 dark:bg-slate-700 rounded">What do you know?</kbd> recall memory</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- ===== GTM PAGE ===== -->
+        <div id="gtmPage" class="page-section hidden">
+            <div class="space-y-4">
+                <div class="flex items-center gap-3"><i class="fas fa-rocket text-2xl text-brand-500"></i><h3 class="text-xl font-bold">🚀 Go-To-Market Toolkit</h3></div>
+                <div class="gtm-card bg-white dark:bg-slate-800 rounded-2xl p-5 shadow-sm border border-slate-200 dark:border-slate-700"><h5 class="font-bold"><i class="fas fa-envelope text-brand-500"></i> Outreach Sequence</h5><input id="gtmOutreachGoal" class="w-full p-2 border rounded-lg mt-2" placeholder="Your goal"><button id="gtmGenerateSequence" class="mt-2 py-2 px-4 bg-brand-500 text-white rounded-lg w-full">Generate</button><div id="gtmSequenceResult" class="mt-2 text-sm"></div></div>
+                <div class="gtm-card bg-white dark:bg-slate-800 rounded-2xl p-5 shadow-sm border border-slate-200 dark:border-slate-700"><h5 class="font-bold"><i class="fas fa-list-check text-brand-500"></i> Launch Checklist</h5><input id="gtmLaunchProduct" class="w-full p-2 border rounded-lg mt-2" placeholder="Product name"><button id="gtmGenerateLaunch" class="mt-2 py-2 px-4 bg-brand-500 text-white rounded-lg w-full">Generate</button><div id="gtmLaunchResult" class="mt-2 text-sm"></div></div>
+                <div class="gtm-card bg-white dark:bg-slate-800 rounded-2xl p-5 shadow-sm border border-slate-200 dark:border-slate-700"><h5 class="font-bold"><i class="fas fa-dollar-sign text-brand-500"></i> Pricing Helper</h5><textarea id="gtmPricingProducts" class="w-full p-2 border rounded-lg mt-2" rows="2" placeholder='[{"name":"Product","cost":10}]'></textarea><button id="gtmGeneratePricing" class="mt-2 py-2 px-4 bg-brand-500 text-white rounded-lg w-full">Suggest</button><div id="gtmPricingResult" class="mt-2 text-sm"></div></div>
+                <div class="gtm-card bg-white dark:bg-slate-800 rounded-2xl p-5 shadow-sm border border-slate-200 dark:border-slate-700"><h5 class="font-bold"><i class="fas fa-user-tie text-brand-500"></i> AI SDR</h5><input id="gtmSDRProduct" class="w-full p-2 border rounded-lg mt-2" placeholder="What are you selling?"><button id="gtmGenerateSDR" class="mt-2 py-2 px-4 bg-brand-500 text-white rounded-lg w-full">Research</button><div id="gtmSDRResult" class="mt-2 text-sm"></div></div>
+                <div class="gtm-card bg-white dark:bg-slate-800 rounded-2xl p-5 shadow-sm border border-slate-200 dark:border-slate-700"><h5 class="font-bold"><i class="fas fa-rotate text-brand-500"></i> Content Repurposer</h5><textarea id="gtmContentInput" class="w-full p-2 border rounded-lg mt-2" rows="2" placeholder="Paste content here..."></textarea><button id="gtmRepurposeContent" class="mt-2 py-2 px-4 bg-brand-500 text-white rounded-lg w-full">Repurpose</button><div id="gtmContentResult" class="mt-2 text-sm"></div></div>
+            </div>
+        </div>
+
+        <!-- ===== CATALOG ===== -->
+        <div id="catalogPage" class="page-section hidden">
+            <div class="bg-white dark:bg-slate-800 rounded-2xl p-5 shadow-sm"><h5 class="font-bold">📦 Upload Product Catalog</h5><input type="file" id="catalogFile" class="w-full p-2 border rounded-lg mt-2" accept=".json"><input type="text" id="storeId" class="w-full p-2 border rounded-lg mt-2" placeholder="Store ID" value="test-store"><button id="uploadCatalogBtn" class="mt-2 py-2 px-4 bg-brand-500 text-white rounded-lg w-full">Upload</button><div id="uploadResult" class="mt-2 text-sm"></div></div>
+        </div>
+
+        <!-- ===== AGENTS ===== -->
+        <div id="agentsPage" class="page-section hidden">
+            <div class="bg-white dark:bg-slate-800 rounded-2xl p-5 shadow-sm"><h5 class="font-bold">🤖 AI Agents</h5><div id="agentsList" class="mt-3 space-y-2"><div class="flex justify-between p-2 border-b"><span>Market Research</span><span class="text-emerald-500">Idle</span></div><div class="flex justify-between p-2 border-b"><span>Trend Analysis</span><span class="text-emerald-500">Idle</span></div><div class="flex justify-between p-2 border-b"><span>Content Writer</span><span class="text-emerald-500">Idle</span></div><div class="flex justify-between p-2 border-b"><span>Campaign Optimizer</span><span class="text-emerald-500">Idle</span></div><div class="flex justify-between p-2 border-b"><span>Data Analyst</span><span class="text-emerald-500">Idle</span></div></div></div>
+        </div>
+
+        <!-- ===== CAMPAIGNS ===== -->
+        <div id="campaignsPage" class="page-section hidden">
+            <div class="bg-white dark:bg-slate-800 rounded-2xl p-5 shadow-sm"><h5 class="font-bold">🔥 Trending Products</h5><button id="getTrendsBtn" class="mt-2 py-2 px-4 bg-brand-500 text-white rounded-lg w-full">Get Trends</button><div id="trendsResult" class="mt-2 text-sm"></div></div>
+        </div>
+
+    </main>
+
+    <!-- ===== BOTTOM NAV ===== -->
+    <nav class="fixed bottom-0 left-0 right-0 bg-white/90 dark:bg-slate-800/90 backdrop-blur-lg border-t border-slate-200/80 dark:border-slate-700/50 flex justify-around p-2 z-50">
+        <button class="nav-tab flex flex-col items-center gap-0.5 py-1 px-3.5 rounded-xl text-[11px] font-medium transition-all" data-page="home"><i class="fas fa-home text-base"></i><span>Home</span></button>
+        <button class="nav-tab flex flex-col items-center gap-0.5 py-1 px-3.5 rounded-xl text-[11px] font-medium transition-all" data-page="vektor"><i class="fas fa-brain text-base"></i><span>Vektor</span></button>
+        <button class="nav-tab flex flex-col items-center gap-0.5 py-1 px-3.5 rounded-xl text-[11px] font-medium transition-all" data-page="gtm"><i class="fas fa-rocket text-base"></i><span>GTM</span></button>
+        <button class="nav-tab flex flex-col items-center gap-0.5 py-1 px-3.5 rounded-xl text-[11px] font-medium transition-all" data-page="catalog"><i class="fas fa-box text-base"></i><span>Catalog</span></button>
+        <button class="nav-tab flex flex-col items-center gap-0.5 py-1 px-3.5 rounded-xl text-[11px] font-medium transition-all" data-page="agents"><i class="fas fa-robot text-base"></i><span>Agents</span></button>
+        <button class="nav-tab flex flex-col items-center gap-0.5 py-1 px-3.5 rounded-xl text-[11px] font-medium transition-all" data-page="campaigns"><i class="fas fa-chart-line text-base"></i><span>Campaigns</span></button>
+    </nav>
+</div>
+
+<!-- ===== ICP WIZARD ===== -->
+<div id="icpWizard" class="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 hidden">
+    <div class="bg-white dark:bg-slate-800 rounded-3xl p-6 max-w-lg w-full mx-4 shadow-2xl">
+        <h2 class="text-xl font-bold mb-2">🎯 Welcome to VektorFlow!</h2>
+        <p class="text-sm text-slate-500 dark:text-slate-400 mb-4">Answer 5 quick questions to personalize your AI agents.</p>
+        <div id="icpStep1">
+            <label class="block text-sm font-medium mb-1">What type of products do you sell?</label>
+            <select id="icpProductType" class="w-full p-2 border rounded-lg mb-3 dark:bg-slate-700">
+                <option value="electronics">Electronics</option><option value="fashion">Fashion</option><option value="home">Home & Kitchen</option><option value="beauty">Beauty</option><option value="fitness">Fitness</option><option value="pets">Pet Supplies</option><option value="toys">Toys</option><option value="other">Other</option>
+            </select>
+            <label class="block text-sm font-medium mb-1">Who is your ideal customer?</label>
+            <input id="icpCustomer" class="w-full p-2 border rounded-lg mb-3" placeholder="e.g., Fitness enthusiasts 25-40">
+            <label class="block text-sm font-medium mb-1">What's your biggest challenge?</label>
+            <select id="icpChallenge" class="w-full p-2 border rounded-lg mb-3"><option value="finding-trends">Finding trending products</option><option value="creating-content">Creating content</option><option value="managing-inventory">Managing inventory</option><option value="customer-acquisition">Getting customers</option><option value="pricing">Pricing</option></select>
+            <label class="block text-sm font-medium mb-1">How do you find new products?</label>
+            <input id="icpWorkflow" class="w-full p-2 border rounded-lg mb-3" placeholder="TikTok, Ecomhunt, CJ Dropshipping">
+            <label class="block text-sm font-medium mb-1">Monthly revenue range?</label>
+            <select id="icpRevenue" class="w-full p-2 border rounded-lg mb-4"><option value="0-500">$0 - $500</option><option value="500-5000">$500 - $5,000</option><option value="5000-50000">$5,000 - $50,000</option><option value="50000+">$50,000+</option></select>
+            <button id="icpSubmit" class="w-full py-2 bg-brand-500 text-white rounded-lg">Continue →</button>
+        </div>
+        <div id="icpStep2" class="hidden text-center py-4">
+            <i class="fas fa-check-circle text-4xl text-emerald-500 mb-3"></i>
+            <h3 class="text-lg font-bold">Personalization Complete!</h3>
+            <p class="text-sm text-slate-500 mt-2">Your AI agents are optimized for your business.</p>
+            <button id="icpDone" class="mt-4 py-2 px-6 bg-brand-500 text-white rounded-lg">Go to Dashboard →</button>
+        </div>
+    </div>
+</div>
+
+<script>
+    const BASE = window.location.origin;
+    let authToken = localStorage.getItem('authToken');
+    let vektorHistory = [];
+
+    // ===== CHECK FOR COMMANDER TOKEN ON LOAD =====
+    const urlParams = new URLSearchParams(window.location.search);
+    const tokenParam = urlParams.get('token');
+    if (tokenParam) {
+        localStorage.setItem('authToken', tokenParam);
+        authToken = tokenParam;
+        // Remove token from URL to keep it clean
+        window.history.replaceState({}, document.title, window.location.pathname);
+    }
+
+    // ===== TOAST =====
+    function showToast(msg, type='info') {
+        const colors = {info:'bg-blue-500', warning:'bg-amber-500', error:'bg-rose-500', success:'bg-emerald-500'};
+        const toast = document.createElement('div');
+        toast.className = `fixed top-4 right-4 z-50 max-w-md p-4 rounded-xl shadow-lg text-white ${colors[type]||colors.info} animate-fade-in`;
+        toast.innerHTML = `<div class="flex items-start gap-3"><span>${msg}</span><button onclick="this.parentElement.parentElement.remove()" class="text-white/70 hover:text-white ml-2">✕</button></div>`;
+        document.body.appendChild(toast);
+        setTimeout(() => toast.remove(), 8000);
+    }
+
+    // ===== API =====
+    async function callApi(endpoint, method='GET', body=null) {
+        const headers = {'Content-Type':'application/json'};
+        if (authToken) headers['api-key'] = authToken;
+        try {
+            const res = await fetch(`${BASE}${endpoint}`, {method, headers, body: body ? JSON.stringify(body) : undefined});
+            const data = await res.json();
+            if (res.status === 429) { showToast(`⏳ Rate limit reached. Please wait.`, 'warning'); return {res, data}; }
+            return {res, data};
+        } catch(err) {
+            showToast(`❌ Network error: ${err.message}`, 'error');
+            return {res: {status:500}, data: {error: err.message}};
+        }
+    }
+
+    // ===== DARK MODE =====
+    if (localStorage.getItem('theme') === 'dark') document.documentElement.classList.add('dark');
+    document.getElementById('themeToggle')?.addEventListener('click', () => {
+        document.documentElement.classList.toggle('dark');
+        localStorage.setItem('theme', document.documentElement.classList.contains('dark') ? 'dark' : 'light');
+    });
+
+    // ===== SAVE KEY =====
+    async function saveProviderKey(provider) {
+        const input = document.getElementById(`key_${provider}`);
+        const apiKey = input.value.trim();
+        if (!apiKey) { showToast('Enter an API key', 'warning'); return; }
+        const {res} = await callApi('/user/llm-keys', 'POST', {provider, api_key: apiKey});
+        if (res.ok) { showToast(`✅ ${provider} key saved`, 'success'); await loadSavedKeys(); await loadAvailableModels(); }
+        else showToast('❌ Failed to save', 'error');
+    }
+
+    async function loadSavedKeys() {
+        if (!authToken) return;
+        const {res, data} = await callApi('/user/llm-keys', 'GET');
+        if (res.ok && data && data.keys) {
+            for (const [provider, key] of Object.entries(data.keys)) {
+                const input = document.getElementById(`key_${provider}`);
+                if (input) input.value = key;
+            }
+        }
+    }
+
+    async function loadAvailableModels() {
+        const container = document.getElementById('aiModelSelector');
+        if (!container) return;
+        const {res, data} = await callApi('/user/llm-keys', 'GET');
+        if (!res.ok || !data || !data.keys || Object.keys(data.keys).length === 0) {
+            container.innerHTML = '<div class="text-slate-400 text-xs col-span-full text-center py-4">Add an API key to see models</div>';
+            return;
+        }
+        const providerModels = {
+            groq: ['llama-3.3-70b-versatile', 'llama-3.1-8b-instant', 'openai/gpt-oss-120b'],
+            deepseek: ['deepseek-v4-pro', 'deepseek-v4-flash'],
+            gemini: ['gemini-2.0-flash-exp', 'gemini-1.5-pro'],
+            huggingface: ['meta-llama/Llama-3.2-1B-Instruct', 'meta-llama/Meta-Llama-3-70B-Instruct'],
+            openai: ['gpt-4o', 'gpt-4o-mini'],
+            anthropic: ['claude-3-5-sonnet-latest', 'claude-3-opus-latest']
+        };
+        const icons = {groq:'⚡', deepseek:'🔍', gemini:'⭐', huggingface:'🤗', openai:'🤖', anthropic:'🧠'};
+        const colors = {groq:'text-amber-500', deepseek:'text-blue-500', gemini:'text-red-500', huggingface:'text-yellow-500', openai:'text-emerald-500', anthropic:'text-indigo-500'};
+        let html = '';
+        let hasModels = false;
+        for (const [provider, models] of Object.entries(providerModels)) {
+            if (!data.keys[provider]) continue;
+            for (const model of models) {
+                hasModels = true;
+                const selected = localStorage.getItem('selectedModel') === model ? 'border-brand-500 bg-brand-50/50 dark:bg-brand-500/10 ring-2 ring-brand-500/20' : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800';
+                html += `<div class="ai-model-card cursor-pointer ${selected} rounded-xl p-3 text-center transition-all hover:border-brand-500" data-model="${model}">
+                    <div class="${colors[provider] || 'text-brand-500'} text-xl">${icons[provider] || '🧠'}</div>
+                    <div class="font-bold text-sm text-slate-800 dark:text-slate-200 mt-1">${model.replace(/-/g, ' ').replace(/\//g, ' / ')}</div>
+                    <span class="text-[10px] text-slate-400">${provider}</span>
+                </div>`;
+            }
+        }
+        container.innerHTML = hasModels ? html : '<div class="text-slate-400 text-xs col-span-full text-center py-4">No models available</div>';
+        document.querySelectorAll('.ai-model-card').forEach(card => {
+            card.addEventListener('click', () => {
+                const model = card.dataset.model;
+                localStorage.setItem('selectedModel', model);
+                document.querySelectorAll('.ai-model-card').forEach(c => c.className = c.className.replace(/border-brand-500 bg-brand-50\/50 dark:bg-brand-500\/10 ring-2 ring-brand-500\/20/g, 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800'));
+                card.className += ' border-brand-500 bg-brand-50/50 dark:bg-brand-500/10 ring-2 ring-brand-500/20';
+                showToast(`Selected: ${model}`, 'info');
+            });
+        });
+    }
+
+    // ===== MEMORY FUNCTIONS =====
+    async function loadMemoryCount() {
+        if (!authToken) return;
+        try {
+            const {res, data} = await callApi('/vektor/memory', 'GET');
+            if (res.ok && data && data.memory) {
+                document.getElementById('memoryCount').innerText = data.memory.length;
+            }
+        } catch(e) {}
+    }
+
+    async function clearAllMemory() {
+        if (!confirm('Delete ALL of Vektor\'s memories?')) return;
+        const {res} = await callApi('/vektor/memory', 'DELETE');
+        if (res.ok) {
+            showToast('🧠 All memories cleared', 'success');
+            loadMemoryCount();
+        }
+    }
+
+    // ===== VEKTOR CHAT =====
+    async function sendVektorMessage() {
+        const input = document.getElementById('vektorInput');
+        const msg = input.value.trim();
+        if (!msg) return;
+        input.value = '';
+        addVektorMessage('user', msg);
+        document.getElementById('vektorStatus').innerHTML = '⏳ Vektor is thinking...';
+        try {
+            const {res, data} = await callApi('/vektor/chat', 'POST', {message: msg, history: vektorHistory});
+            if (res.ok && data) {
+                addVektorMessage('ai', data.response || 'Done.');
+                vektorHistory.push({role: 'user', content: msg});
+                vektorHistory.push({role: 'assistant', content: data.response || ''});
+                if (data.learnings) {
+                    loadMemoryCount();
+                }
+            } else {
+                addVektorMessage('ai', '❌ Sorry, I encountered an error. Please try again.');
+            }
+        } catch(e) {
+            addVektorMessage('ai', '❌ Error: ' + e.message);
+        }
+        document.getElementById('vektorStatus').innerHTML = '';
+    }
+
+    function addVektorMessage(role, text) {
+        const container = document.getElementById('vektorMessages');
+        const div = document.createElement('div');
+        div.className = role === 'user' ? 'vektor-message-user' : 'vektor-message-ai';
+        div.innerHTML = text.replace(/\n/g, '<br>');
+        container.appendChild(div);
+        container.scrollTop = container.scrollHeight;
+        while (container.children.length > 50) container.removeChild(container.firstChild);
+    }
+
+    // ===== VOICE =====
+    let recognition = null;
+    if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
+        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+        recognition = new SpeechRecognition();
+        recognition.lang = 'en-US';
+        recognition.interimResults = false;
+        recognition.onresult = (event) => {
+            const transcript = event.results[0][0].transcript;
+            document.getElementById('vektorInput').value = transcript;
+            sendVektorMessage();
+        };
+        recognition.onend = () => { document.getElementById('vektorStatus').innerHTML = ''; };
+    }
+
+    document.getElementById('vektorVoiceBtn')?.addEventListener('click', () => {
+        if (!authToken) { showToast('Please log in', 'warning'); return; }
+        if (recognition) {
+            document.getElementById('vektorStatus').innerHTML = '🎙️ Listening...';
+            recognition.start();
+        } else {
+            showToast('Voice not supported on this browser', 'error');
+        }
+    });
+
+    document.getElementById('vektorSendBtn')?.addEventListener('click', sendVektorMessage);
+    document.getElementById('vektorInput')?.addEventListener('keydown', (e) => { if (e.key === 'Enter') sendVektorMessage(); });
+
+    // ===== CONNECT STORE =====
+    document.getElementById('connectStoreBtn')?.addEventListener('click', async () => {
+        const storeUrl = document.getElementById('storeUrl').value.trim();
+        const platform = document.getElementById('platformSelect').value;
+        if (!storeUrl) { document.getElementById('authMessage').innerHTML = '<span class="text-rose-500">Enter your store URL</span>'; return; }
+        document.getElementById('authMessage').innerHTML = '<span class="text-brand-500">⏳ Connecting...</span>';
+        try {
+            const res = await fetch(`${BASE}/store/initiate`, {
+                method: 'POST',
+                headers: {'Content-Type':'application/json'},
+                body: JSON.stringify({platform, store_url: storeUrl, redirect_uri: `${BASE}/store/callback`})
+            });
+            const data = await res.json();
+            if (data.auth_url) {
+                localStorage.setItem('oauth_state', data.state);
+                localStorage.setItem('store_url', storeUrl);
+                window.location.href = data.auth_url;
+            } else {
+                document.getElementById('authMessage').innerHTML = `<span class="text-rose-500">${data.error || 'Connection failed'}</span>`;
+            }
+        } catch(err) { document.getElementById('authMessage').innerHTML = `<span class="text-rose-500">Error: ${err.message}</span>`; }
+    });
+
+    // ===== NAVIGATION =====
+    document.querySelectorAll('.nav-tab').forEach(tab => {
+        tab.addEventListener('click', () => {
+            document.querySelectorAll('.page-section').forEach(s => s.classList.remove('active-page'));
+            document.getElementById(`${tab.dataset.page}Page`).classList.add('active-page');
+            document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('text-brand-500', 'bg-brand-50/80', 'dark:bg-brand-500/10'));
+            tab.classList.add('text-brand-500', 'bg-brand-50/80', 'dark:bg-brand-500/10');
+        });
+    });
+
+    // ===== LOGIN =====
+    async function checkAuth() {
+        if (!authToken) return;
+        try {
+            const res = await fetch(`${BASE}/user/stores`, {headers: {'api-key': authToken}});
+            if (res.ok) {
+                const data = await res.json();
+                document.getElementById('authPage').style.display = 'none';
+                document.getElementById('dashboardContainer').style.display = 'flex';
+                // Check if Commander
+                const userEmail = data.stores && data.stores.length > 0 ? data.stores[0].email : '';
+                if (userEmail === 'commander@vektorflow.com' || data.stores?.some(s => s.email === 'commander@vektorflow.com')) {
+                    document.getElementById('commanderBadge').classList.remove('hidden');
+                    document.getElementById('controlPanelBtn').classList.remove('hidden');
+                }
+                if (data.stores && data.stores.length > 0) {
+                    document.getElementById('storeDisplay').innerText = data.stores[0].store_url || 'Connected Store';
+                }
+                await loadSavedKeys();
+                await loadAvailableModels();
+                await loadMemoryCount();
+                checkSubscription();
+                setInterval(checkSubscription, 30000);
+            }
+        } catch(e) {}
+    }
+
+    async function checkSubscription() {
+        if (!authToken) return;
+        try {
+            const res = await fetch(`${BASE}/subscription/status`, {headers: {'api-key': authToken}});
+            const data = await res.json();
+            const badge = document.getElementById('trialBadge');
+            const upgrade = document.getElementById('upgradeBtn');
+            if (data.tier === 'trial') {
+                const days = Math.ceil((new Date(data.trial_expires) - new Date()) / (1000*60*60*24));
+                badge.innerHTML = `● ${days} DAY${days!==1?'S':''} LEFT`;
+                badge.className = 'inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-amber-50 dark:bg-amber-500/10 text-amber-600 dark:text-amber-400';
+                upgrade.classList.remove('hidden');
+            } else if (data.plan && data.plan !== 'free') {
+                badge.innerHTML = `● ${data.plan.toUpperCase()}`;
+                badge.className = 'inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-emerald-50 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400';
+                upgrade.classList.add('hidden');
+            }
+        } catch(e) {}
+    }
+
+    document.getElementById('upgradeBtn')?.addEventListener('click', async () => {
+        const res = await fetch(`${BASE}/payment/create-checkout?plan=starter`, {
+            method: 'POST',
+            headers: {'api-key': authToken, 'Content-Type':'application/json'}
+        });
+        const data = await res.json();
+        if (data.checkout_url) window.location.href = data.checkout_url;
+    });
+
+    document.getElementById('logoutBtn')?.addEventListener('click', () => {
+        localStorage.removeItem('authToken');
+        localStorage.removeItem('oauth_state');
+        window.location.reload();
+    });
+
+    checkAuth();
+
+    // ===== ICP =====
+    if (!localStorage.getItem('icp_complete') && authToken) document.getElementById('icpWizard').classList.remove('hidden');
+    document.getElementById('icpSubmit')?.addEventListener('click', async () => {
+        const data = {
+            product_type: document.getElementById('icpProductType').value,
+            customer: document.getElementById('icpCustomer').value,
+            challenge: document.getElementById('icpChallenge').value,
+            workflow: document.getElementById('icpWorkflow').value,
+            revenue: document.getElementById('icpRevenue').value
+        };
+        await fetch(`${BASE}/user/icp`, {method:'POST', headers:{'Content-Type':'application/json','api-key':authToken}, body:JSON.stringify(data)});
+        document.getElementById('icpStep1').classList.add('hidden');
+        document.getElementById('icpStep2').classList.remove('hidden');
+        localStorage.setItem('icp_complete', 'true');
+    });
+    document.getElementById('icpDone')?.addEventListener('click', () => {
+        document.getElementById('icpWizard').classList.add('hidden');
+        location.reload();
+    });
+
+    // ===== GTM =====
+    async function gtmCall(endpoint, resultId, body) {
+        document.getElementById(resultId).innerHTML = '<span class="text-brand-500">⏳ Generating...</span>';
+        try {
+            const {data} = await callApi(endpoint, 'POST', body);
+            document.getElementById(resultId).innerHTML = `<pre class="whitespace-pre-wrap text-sm">${data.response || data.error}</pre>`;
+        } catch(e) { document.getElementById(resultId).innerHTML = `<span class="text-rose-500">Error: ${e.message}</span>`; }
+    }
+
+    document.getElementById('gtmGenerateSequence')?.addEventListener('click', () => {
+        const goal = document.getElementById('gtmOutreachGoal').value;
+        if (!goal) return showToast('Enter a goal', 'warning');
+        gtmCall('/outreach/generate', 'gtmSequenceResult', {goal, product_type:'products', customer:'store owners', challenge:'finding customers'});
+    });
+    document.getElementById('gtmGenerateLaunch')?.addEventListener('click', () => {
+        const product = document.getElementById('gtmLaunchProduct').value;
+        if (!product) return showToast('Enter a product name', 'warning');
+        gtmCall('/launch/generate', 'gtmLaunchResult', {product, audience:'e-commerce entrepreneurs'});
+    });
+    document.getElementById('gtmGeneratePricing')?.addEventListener('click', () => {
+        try { const products = JSON.parse(document.getElementById('gtmPricingProducts').value); gtmCall('/pricing/suggest', 'gtmPricingResult', {products}); }
+        catch(e) { showToast('Invalid JSON format', 'error'); }
+    });
+    document.getElementById('gtmGenerateSDR')?.addEventListener('click', () => {
+        const product = document.getElementById('gtmSDRProduct').value;
+        if (!product) return showToast('Enter a product name', 'warning');
+        gtmCall('/sdr/research', 'gtmSDRResult', {product, audience:'e-commerce store owners'});
+    });
+    document.getElementById('gtmRepurposeContent')?.addEventListener('click', () => {
+        const content = document.getElementById('gtmContentInput').value;
+        if (!content) return showToast('Enter content', 'warning');
+        gtmCall('/content/repurpose', 'gtmContentResult', {content});
+    });
+
+    // ===== CATALOG =====
+    document.getElementById('uploadCatalogBtn')?.addEventListener('click', async () => {
+        const file = document.getElementById('catalogFile').files[0];
+        if (!file) return showToast('Select a JSON file', 'warning');
+        const text = await file.text();
+        const products = JSON.parse(text);
+        const storeId = document.getElementById('storeId').value;
+        const {data} = await callApi('/ecommerce/catalog', 'POST', {store_id: storeId, products});
+        document.getElementById('uploadResult').innerHTML = `<pre class="bg-slate-100 dark:bg-slate-900 p-2 rounded text-xs">✅ ${JSON.stringify(data, null, 2)}</pre>`;
+        document.getElementById('statProducts').innerText = products.length;
+    });
+
+    document.getElementById('getTrendsBtn')?.addEventListener('click', async () => {
+        const storeId = document.getElementById('storeId').value || 'test-store';
+        const {data} = await callApi(`/ecommerce/trends/${storeId}`, 'GET');
+        document.getElementById('trendsResult').innerHTML = `<pre class="bg-slate-100 dark:bg-slate-900 p-2 rounded text-xs">${JSON.stringify(data, null, 2)}</pre>`;
+    });
+
+    // ===== OAUTH =====
+    const oauthCode = urlParams.get('code');
+    const shop = urlParams.get('shop');
+    const state = urlParams.get('state');
+    if (oauthCode && shop && state) {
+        const platform = localStorage.getItem('oauth_platform') || 'shopify';
+        fetch(`${BASE}/store/callback?code=${oauthCode}&shop=${shop}&state=${state}&platform=${platform}`)
+            .then(res => res.json())
+            .then(data => {
+                if (data.access_token) {
+                    localStorage.setItem('authToken', data.access_token);
+                    localStorage.removeItem('oauth_state');
+                    window.location.href = '/';
+                } else {
+                    document.getElementById('authMessage').innerHTML = `<span class="text-rose-500">${data.error || 'Authorization failed'}</span>`;
+                }
+            });
+    }
+</script>
+</body>
+</html>
