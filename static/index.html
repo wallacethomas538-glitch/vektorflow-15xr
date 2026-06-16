@@ -1,0 +1,74 @@
+async function callApi(endpoint, method = 'GET', body = null) {
+    const headers = { 'Content-Type': 'application/json' };
+    if (authToken) headers['api-key'] = authToken;
+    
+    try {
+        const res = await fetch(`${BASE}${endpoint}`, { method, headers, body: body ? JSON.stringify(body) : undefined });
+        const data = await res.json();
+        
+        // === RATE LIMIT HANDLING ===
+        if (res.status === 429) {
+            const retryAfter = data.retry_after || 60;
+            const limit = data.limit || 50;
+            const window_minutes = data.window || 60;
+            
+            let errorMsg = `⏳ Rate limit reached.`;
+            if (data.tier === 'trial') {
+                errorMsg += ` You're on the free trial (${limit} requests per ${window_minutes} minutes).`;
+            } else if (data.tier === 'anonymous') {
+                errorMsg += ` Please log in for higher limits.`;
+            }
+            errorMsg += ` Please wait ${retryAfter} seconds and try again.`;
+            
+            // Show user-friendly error
+            showToast(errorMsg, 'warning');
+            
+            // Disable buttons temporarily
+            document.querySelectorAll('button').forEach(btn => {
+                btn.disabled = true;
+                btn.style.opacity = '0.5';
+            });
+            
+            setTimeout(() => {
+                document.querySelectorAll('button').forEach(btn => {
+                    btn.disabled = false;
+                    btn.style.opacity = '1';
+                });
+            }, retryAfter * 1000);
+            
+            return { res, data };
+        }
+        
+        // === API KEY ERROR HANDLING ===
+        if (data.error && (data.error.includes('API key') || data.error.includes('key'))) {
+            showToast(`🔑 ${data.error} — Need help? Click the "?" icon to see how to get a free key.`, 'error');
+        }
+        
+        return { res, data };
+    } catch (err) {
+        showToast(`❌ Network error: ${err.message}`, 'error');
+        return { res: { status: 500 }, data: { error: err.message } };
+    }
+}
+
+// Toast notification system
+function showToast(message, type = 'info') {
+    const colors = {
+        info: 'bg-blue-500',
+        warning: 'bg-amber-500',
+        error: 'bg-rose-500',
+        success: 'bg-emerald-500'
+    };
+    
+    const toast = document.createElement('div');
+    toast.className = `fixed top-4 right-4 z-50 max-w-md p-4 rounded-xl shadow-lg text-white ${colors[type] || colors.info} animate-fade-in`;
+    toast.innerHTML = `
+        <div class="flex items-start gap-3">
+            <i class="fas fa-${type === 'warning' ? 'exclamation-triangle' : type === 'error' ? 'times-circle' : 'info-circle'} mt-0.5"></i>
+            <div class="text-sm">${message}</div>
+            <button onclick="this.parentElement.parentElement.remove()" class="text-white/70 hover:text-white ml-2">✕</button>
+        </div>
+    `;
+    document.body.appendChild(toast);
+    setTimeout(() => toast.remove(), 8000);
+}
