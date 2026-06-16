@@ -1,0 +1,23 @@
+# VektorFlow 15xr
+
+Connect your store. 7-day trial. AI agents automate your e-commerce.
+
+## Features
+
+- OAuth-only login (connect your store)
+- 7-day free trial
+- Universal LLM support (BYOK)
+- CJ Dropshipping integration
+- Autonomous AI agents
+- Subscription enforcement
+
+## Deploy
+
+1. Fork this repo to GitHub
+2. Connect to Render
+3. Add environment variables
+4. Deploy
+
+## License
+
+Proprietary. All rights reserved.
