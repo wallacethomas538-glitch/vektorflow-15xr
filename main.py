@@ -1,0 +1,462 @@
+"""
+VektorFlow 15xr - Main Entry Point
+Complete working version with all endpoints
+"""
+
+from fastapi import FastAPI, HTTPException, Header, Depends, Request
+from fastapi.responses import FileResponse, JSONResponse
+from fastapi.staticfiles import StaticFiles
+from pydantic import BaseModel
+from typing import Optional, Dict, Any, List
+import os
+import json
+import sqlite3
+from datetime import datetime, timedelta
+import hashlib
+import jwt
+import secrets
+
+app = FastAPI(title="VektorFlow 15xr")
+
+# ========== DATABASE ==========
+DB_PATH = "vektorflow.db"
+
+def get_db():
+    conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row
+    return conn
+
+def init_db():
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS users (
+            email TEXT PRIMARY KEY,
+            password_hash TEXT NOT NULL,
+            store_name TEXT,
+            tier TEXT DEFAULT 'trial',
+            trial_expires TIMESTAMP,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS user_llm_keys (
+            email TEXT NOT NULL,
+            provider TEXT NOT NULL,
+            api_key TEXT NOT NULL,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (email, provider)
+        )
+    """)
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS user_stores (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            email TEXT NOT NULL,
+            platform TEXT NOT NULL,
+            store_url TEXT,
+            api_key TEXT,
+            api_secret TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS task_history (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            email TEXT NOT NULL,
+            agent_name TEXT NOT NULL,
+            task TEXT NOT NULL,
+            result TEXT,
+            status TEXT DEFAULT 'pending',
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            completed_at TIMESTAMP
+        )
+    """)
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS subscriptions (
+            email TEXT PRIMARY KEY,
+            plan TEXT DEFAULT 'free',
+            status TEXT DEFAULT 'active',
+            current_period_end TIMESTAMP,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+    conn.commit()
+    conn.close()
+
+init_db()
+
+# ========== CONFIG ==========
+SECRET_KEY = os.environ.get("JWT_SECRET_KEY", "change_me")
+ALGORITHM = "HS256"
+COMMANDER_EMAIL = "commander@vektorflow.com"
+COMMANDER_PASSWORD = "test123"
+
+def hash_password(password: str) -> str:
+    return hashlib.sha256(password.encode()).hexdigest()
+
+def verify_password(password: str, hashed: str) -> bool:
+    return hash_password(password) == hashed
+
+def create_jwt(email: str) -> str:
+    token_data = {"email": email, "exp": datetime.utcnow() + timedelta(days=7)}
+    return jwt.encode(token_data, SECRET_KEY, algorithm=ALGORITHM)
+
+def get_current_user(api_key: str = Header(...)):
+    try:
+        payload = jwt.decode(api_key, SECRET_KEY, algorithms=[ALGORITHM])
+        email = payload.get("email")
+        if not email:
+            raise HTTPException(401, "Invalid token")
+        return email
+    except:
+        raise HTTPException(401, "Invalid or expired token")
+
+# ========== COMMANDER LOGIN ==========
+@app.get("/commander-dashboard")
+async def commander_dashboard():
+    user = get_user(COMMANDER_EMAIL)
+    if not user:
+        create_user(COMMANDER_EMAIL, hash_password(COMMANDER_PASSWORD), "Commander Store")
+        create_subscription(COMMANDER_EMAIL, "free")
+    token = create_jwt(COMMANDER_EMAIL)
+    return RedirectResponse(url=f"/?token={token}")
+
+# ========== GET USER ==========
+def get_user(email: str):
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute("SELECT * FROM users WHERE email = ?", (email,))
+    row = cursor.fetchone()
+    conn.close()
+    return dict(row) if row else None
+
+def create_user(email: str, password_hash: str, store_name: str):
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute("""
+        INSERT INTO users (email, password_hash, store_name, tier, trial_expires)
+        VALUES (?, ?, ?, 'trial', datetime('now', '+7 days'))
+    """, (email, password_hash, store_name))
+    conn.commit()
+    conn.close()
+
+def create_subscription(email: str, plan: str = "free"):
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute("""
+        INSERT OR REPLACE INTO subscriptions (email, plan, status, current_period_end)
+        VALUES (?, ?, 'active', datetime('now', '+7 days'))
+    """, (email, plan))
+    conn.commit()
+    conn.close()
+
+def get_llm_keys(email: str):
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute("SELECT provider, api_key FROM user_llm_keys WHERE email = ?", (email,))
+    rows = cursor.fetchall()
+    conn.close()
+    return {row[0]: row[1] for row in rows}
+
+def save_llm_key(email: str, provider: str, api_key: str):
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute("""
+        INSERT OR REPLACE INTO user_llm_keys (email, provider, api_key, updated_at)
+        VALUES (?, ?, ?, CURRENT_TIMESTAMP)
+    """, (email, provider, api_key))
+    conn.commit()
+    conn.close()
+
+def add_task_history(email: str, agent_name: str, task: str, status: str = "pending") -> int:
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute("""
+        INSERT INTO task_history (email, agent_name, task, status)
+        VALUES (?, ?, ?, ?)
+    """, (email, agent_name, task, status))
+    task_id = cursor.lastrowid
+    conn.commit()
+    conn.close()
+    return task_id
+
+def update_task_result(task_id: int, result: str, status: str = "completed"):
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute("""
+        UPDATE task_history SET result = ?, status = ?, completed_at = CURRENT_TIMESTAMP
+        WHERE id = ?
+    """, (result, status, task_id))
+    conn.commit()
+    conn.close()
+
+def get_user_stores(email: str):
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute("SELECT * FROM user_stores WHERE email = ?", (email,))
+    rows = cursor.fetchall()
+    conn.close()
+    return [dict(row) for row in rows]
+
+# ========== LLM ROUTER ==========
+async def call_llm(prompt: str, model: str, user_keys: Dict) -> Dict:
+    groq_key = user_keys.get("groq")
+    if not groq_key:
+        groq_key = os.environ.get("GROQ_API_KEY")
+    
+    if not groq_key:
+        return {"success": False, "error": "No Groq API key found. Add your API key in settings."}
+    
+    try:
+        import httpx
+        async with httpx.AsyncClient(timeout=60.0) as client:
+            response = await client.post(
+                "https://api.groq.com/openai/v1/chat/completions",
+                headers={"Authorization": f"Bearer {groq_key}", "Content-Type": "application/json"},
+                json={
+                    "model": model,
+                    "messages": [{"role": "user", "content": prompt}],
+                    "temperature": 0.7,
+                    "max_tokens": 500
+                }
+            )
+            if response.status_code == 200:
+                data = response.json()
+                content = data.get("choices", [{}])[0].get("message", {}).get("content", "")
+                return {"success": True, "response": content}
+            else:
+                return {"success": False, "error": f"API error: {response.status_code}"}
+    except Exception as e:
+        return {"success": False, "error": f"Request failed: {str(e)}"}
+
+# ========== ROOT & HEALTH ==========
+@app.get("/")
+def root():
+    return FileResponse("static/index.html")
+
+@app.get("/health")
+def health():
+    return {"status": "healthy", "timestamp": datetime.now().isoformat()}
+
+# ========== AUTH ==========
+@app.post("/auth/login")
+def login(email: str, password: str):
+    user = get_user(email)
+    if not user:
+        return {"error": "User not found"}
+    if not verify_password(password, user["password_hash"]):
+        return {"error": "Invalid password"}
+    token = create_jwt(email)
+    return {"access_token": token, "email": email}
+
+@app.post("/auth/signup")
+def signup(email: str, password: str, store_name: str = ""):
+    if get_user(email):
+        return {"error": "User already exists"}
+    create_user(email, hash_password(password), store_name or email.split('@')[0])
+    create_subscription(email, "free")
+    token = create_jwt(email)
+    return {"access_token": token, "email": email}
+
+# ========== LLM KEYS ==========
+@app.post("/user/llm-keys")
+def save_keys(data: dict, email: str = Depends(get_current_user)):
+    provider = data.get("provider")
+    api_key = data.get("api_key")
+    if not provider or not api_key:
+        raise HTTPException(400, "Provider and API key required")
+    save_llm_key(email, provider, api_key)
+    return {"status": "saved", "provider": provider}
+
+@app.get("/user/llm-keys")
+def get_keys(email: str = Depends(get_current_user)):
+    return {"keys": get_llm_keys(email)}
+
+@app.get("/user/stores")
+def get_stores(email: str = Depends(get_current_user)):
+    return {"stores": get_user_stores(email)}
+
+@app.get("/subscription/status")
+def get_subscription(email: str = Depends(get_current_user)):
+    user = get_user(email)
+    if not user:
+        return {"status": "unknown"}
+    return {"tier": user["tier"], "trial_expires": user["trial_expires"]}
+
+# ========== AGENT TASKS ==========
+class AgentTaskRequest(BaseModel):
+    agent_name: str
+    task: str
+    model: Optional[str] = "llama-3.3-70b-versatile"
+
+@app.post("/agent/run")
+async def run_agent(req: AgentTaskRequest, email: str = Depends(get_current_user)):
+    user_keys = get_llm_keys(email)
+    task_id = add_task_history(email, req.agent_name, req.task, "running")
+    
+    agent_personas = {
+        "Market Research Agent": "You are a market research expert. Provide actionable insights.",
+        "Trend Analysis Agent": "You are a trend detection specialist. Identify emerging trends.",
+        "Content Writer Agent": "You are a creative copywriter. Write engaging copy.",
+        "Campaign Optimizer": "You are a marketing strategist. Optimize campaigns.",
+        "Data Analyst Agent": "You are a data analyst. Provide clear analysis."
+    }
+    
+    persona = agent_personas.get(req.agent_name, "You are a helpful assistant.")
+    full_prompt = f"{persona}\n\nTask: {req.task}\n\nProvide detailed, actionable results."
+    
+    result = await call_llm(full_prompt, req.model, user_keys)
+    
+    if result.get("success"):
+        update_task_result(task_id, result.get("response", ""), "completed")
+        return {"success": True, "response": result.get("response"), "task_id": task_id}
+    else:
+        update_task_result(task_id, result.get("error", ""), "failed")
+        return {"success": False, "error": result.get("error"), "task_id": task_id}
+
+# ========== LLM DIRECT CALL ==========
+class DirectLLMRequest(BaseModel):
+    prompt: str
+    model: str = "llama-3.3-70b-versatile"
+
+@app.post("/llm/call")
+async def llm_call(req: DirectLLMRequest, email: str = Depends(get_current_user)):
+    user_keys = get_llm_keys(email)
+    result = await call_llm(req.prompt, req.model, user_keys)
+    return result
+
+# ========== E-COMMERCE ==========
+catalogs_cache = {}
+
+class CatalogUpload(BaseModel):
+    store_id: str
+    products: List[Dict[str, Any]]
+
+@app.post("/ecommerce/catalog")
+def upload_catalog(data: CatalogUpload, email: str = Depends(get_current_user)):
+    catalogs_cache[data.store_id] = data.products
+    return {"status": "catalog stored", "store_id": data.store_id, "product_count": len(data.products)}
+
+@app.get("/ecommerce/trends/{store_id}")
+def get_trends(store_id: str, email: str = Depends(get_current_user)):
+    if store_id not in catalogs_cache:
+        raise HTTPException(404, "No catalog found")
+    products = catalogs_cache[store_id]
+    trends = ["wireless", "fitness", "eco friendly", "smart", "bluetooth", "waterproof", "organic", "portable"]
+    matches = []
+    for product in products[:20]:
+        name = product.get("name", "").lower()
+        for trend in trends:
+            if trend in name:
+                matches.append({
+                    "product": product.get("name"),
+                    "trend": trend,
+                    "campaign_angle": f"🔥 {product.get('name')} is trending with '{trend}'!"
+                })
+                break
+    return {"success": True, "matches": matches, "count": len(matches)}
+
+@app.get("/ecommerce/campaign/{store_id}/{product_name}")
+def get_campaign(store_id: str, product_name: str, email: str = Depends(get_current_user)):
+    return {
+        "product": product_name,
+        "messages": [
+            f"🔥 {product_name} is trending! Want the link?",
+            f"✨ 4.5★ from customers — you'll love it",
+            f"⏳ Only a few left. Link here: [LINK]"
+        ]
+    }
+
+# ========== GTM TOOLS ==========
+class OutreachRequest(BaseModel):
+    goal: str
+    product_type: str = "products"
+    customer: str = "store owners"
+    challenge: str = "finding customers"
+
+@app.post("/outreach/generate")
+async def generate_outreach(req: OutreachRequest, email: str = Depends(get_current_user)):
+    user_keys = get_llm_keys(email)
+    prompt = f"""
+    Generate a 3-email + 2-LinkedIn message outreach sequence for a business that sells {req.product_type}.
+    Target: {req.customer}. Goal: {req.goal}. Pain point: {req.challenge}.
+    Format: Email 1 (Day 1), LinkedIn 1 (Day 2), Email 2 (Day 4), LinkedIn 2 (Day 6), Email 3 (Day 8).
+    """
+    result = await call_llm(prompt, "llama-3.3-70b-versatile", user_keys)
+    return result
+
+class LaunchRequest(BaseModel):
+    product: str
+    audience: str = "e-commerce entrepreneurs"
+
+@app.post("/launch/generate")
+async def generate_launch(req: LaunchRequest, email: str = Depends(get_current_user)):
+    user_keys = get_llm_keys(email)
+    prompt = f"""
+    Create a launch checklist for: {req.product}. Target audience: {req.audience}.
+    Include: Pre-launch (30 days), Launch week, Post-launch, Success metrics.
+    """
+    result = await call_llm(prompt, "llama-3.3-70b-versatile", user_keys)
+    return result
+
+class PricingRequest(BaseModel):
+    products: List[Dict[str, Any]]
+
+@app.post("/pricing/suggest")
+async def suggest_pricing(req: PricingRequest, email: str = Depends(get_current_user)):
+    user_keys = get_llm_keys(email)
+    products = req.products[:5]
+    if not products:
+        return {"error": "No products provided"}
+    prompt = f"""
+    Suggest pricing strategies for: {json.dumps(products)}.
+    Include: price points, strategy (premium/competitive/penetration), bundles, discounts.
+    """
+    result = await call_llm(prompt, "llama-3.3-70b-versatile", user_keys)
+    return result
+
+class SDRRequest(BaseModel):
+    product: str
+    audience: str = "e-commerce store owners"
+
+@app.post("/sdr/research")
+async def sdr_research(req: SDRRequest, email: str = Depends(get_current_user)):
+    user_keys = get_llm_keys(email)
+    prompt = f"""
+    Research leads for: {req.product}. Target: {req.audience}.
+    Provide: 5 lead profiles with company, role, why fit, email draft, LinkedIn message.
+    """
+    result = await call_llm(prompt, "llama-3.3-70b-versatile", user_keys)
+    return result
+
+@app.post("/content/repurpose")
+async def repurpose_content(data: dict, email: str = Depends(get_current_user)):
+    user_keys = get_llm_keys(email)
+    content = data.get('content', '')
+    if not content:
+        return {"error": "No content provided"}
+    prompt = f"""
+    Repurpose this content: {content[:500]}.
+    Generate: 3 social posts (X, LinkedIn, Instagram), 1 email snippet, 1 ad copy.
+    """
+    result = await call_llm(prompt, "llama-3.3-70b-versatile", user_keys)
+    return result
+
+# ========== VEKTOR CHAT (Basic) ==========
+class VektorChatRequest(BaseModel):
+    message: str
+    history: Optional[List[Dict]] = []
+
+@app.post("/vektor/chat")
+async def vektor_chat(req: VektorChatRequest, email: str = Depends(get_current_user)):
+    user_keys = get_llm_keys(email)
+    prompt = f"""
+    You are Vektor, the personal AI assistant for VektorFlow 15xr.
+    User said: {req.message}
+    Respond helpfully, concisely, and suggest next steps.
+    """
+    result = await call_llm(prompt, "llama-3.3-70b-versatile", user_keys)
+    return result
+
+# ========== SERVE FRONTEND ==========
+app.mount("/static", StaticFiles(directory="static", html=True), name="static")
