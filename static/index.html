@@ -1,0 +1,560 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
+    <title>VektorFlow 15xr | Full AI Command Center</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        body { background: #f0f2f5; font-family: system-ui, sans-serif; color: #1a1a2e; }
+        .glass-card { background: white; border-radius: 20px; padding: 1rem; box-shadow: 0 2px 8px rgba(0,0,0,0.05); border: 1px solid #e9ecef; }
+        .stat-value { font-size: 2rem; font-weight: 700; color: #7c3aed; }
+        .bottom-nav { position: fixed; bottom: 0; left: 0; right: 0; background: white; border-top: 1px solid #e9ecef; display: flex; justify-content: space-around; padding: 0.5rem; z-index: 100; }
+        .nav-tab { background: none; border: none; color: #888; font-size: 0.65rem; display: flex; flex-direction: column; align-items: center; gap: 0.15rem; padding: 0.3rem 0.6rem; border-radius: 10px; transition: 0.2s; cursor: pointer; }
+        .nav-tab i { font-size: 1.1rem; }
+        .nav-tab.active { color: #7c3aed; background: #f3f0ff; }
+        .page-section { display: none; }
+        .page-section.active { display: block; }
+        .auth-card { background: white; border-radius: 28px; padding: 2rem; max-width: 420px; width: 100%; margin: 2rem auto; box-shadow: 0 10px 40px rgba(0,0,0,0.1); }
+        .btn-primary { background: #7c3aed; color: white; border: none; padding: 0.5rem 1.2rem; border-radius: 12px; font-weight: 500; cursor: pointer; transition: 0.2s; }
+        .btn-primary:hover { background: #6d28d9; }
+        .btn-amber { background: #f59e0b; color: white; border: none; padding: 0.5rem 1.2rem; border-radius: 12px; font-weight: 500; cursor: pointer; transition: 0.2s; }
+        .btn-amber:hover { background: #d97706; }
+        .toast { position: fixed; top: 1rem; right: 1rem; z-index: 1000; padding: 0.75rem 1.5rem; border-radius: 12px; color: white; animation: fadeIn 0.3s; }
+        .toast-success { background: #10b981; }
+        .toast-error { background: #ef4444; }
+        .toast-warning { background: #f59e0b; }
+        .toast-info { background: #3b82f6; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(-10px); } to { opacity: 1; transform: translateY(0); } }
+        .vektor-msg-user { background: #7c3aed; color: white; border-radius: 18px 18px 4px 18px; padding: 0.5rem 1rem; max-width: 80%; align-self: flex-end; margin: 0.25rem 0; }
+        .vektor-msg-ai { background: #f1f5f9; color: #1e293b; border-radius: 18px 18px 18px 4px; padding: 0.5rem 1rem; max-width: 80%; align-self: flex-start; margin: 0.25rem 0; border-left: 3px solid #7c3aed; }
+        .dark .vektor-msg-ai { background: #1e293b; color: #e2e8f0; }
+        .commander-badge { background: #f59e0b; color: #1a1a2e; padding: 0.1rem 0.6rem; border-radius: 12px; font-size: 0.6rem; font-weight: bold; }
+        .memory-chip { background: #7c3aed10; border: 1px solid #7c3aed20; border-radius: 20px; padding: 0.2rem 0.8rem; font-size: 0.65rem; color: #7c3aed; }
+        input, select, textarea { background: white; border: 1px solid #ddd; border-radius: 12px; padding: 0.5rem 0.75rem; width: 100%; color: #1a1a2e; }
+        input:focus, select:focus, textarea:focus { outline: none; border-color: #7c3aed; }
+        .dark { background: #0a0a0f; color: #e5e5e5; }
+        .dark .glass-card { background: #1a1a2e; border-color: #2a2a4e; }
+        .dark .auth-card { background: #1a1a2e; border-color: #2a2a4e; }
+        .dark .bottom-nav { background: #1a1a2e; border-color: #2a2a4e; }
+        .dark .nav-tab { color: #888; }
+        .dark .nav-tab.active { color: #a78bfa; background: #2a2a4e; }
+        .dark input, .dark select, .dark textarea { background: #1a1a2e; border-color: #2a2a4e; color: #e5e5e5; }
+        .dark .vektor-msg-ai { background: #2a2a4e; color: #e5e5e5; }
+        .dark .commander-badge { background: #f59e0b; color: #1a1a2e; }
+        .provider-row { display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap; }
+        .provider-row label { min-width: 90px; font-size: 0.7rem; font-weight: 600; color: #6b7280; }
+        .provider-row input { flex: 1; min-width: 120px; }
+        .provider-row button { flex-shrink: 0; }
+    </style>
+</head>
+<body>
+
+<!-- ===== AUTH PAGE ===== -->
+<div id="authPage" class="flex items-center justify-center min-h-screen p-4">
+    <div class="auth-card">
+        <div class="text-center mb-6">
+            <i class="fas fa-bolt text-3xl text-#7c3aed"></i>
+            <h2 class="text-2xl font-bold">VektorFlow 15xr</h2>
+            <p class="text-sm text-gray-500">Connect your store to start</p>
+            <div class="mt-1 inline-flex items-center gap-1 text-xs text-amber-500"><i class="fas fa-crown"></i> <span class="commander-badge">Commander Login Available</span></div>
+        </div>
+        <div class="space-y-3">
+            <input type="url" id="storeUrl" placeholder="https://yourstore.myshopify.com">
+            <select id="platformSelect"><option value="shopify">Shopify</option><option value="woocommerce">WooCommerce</option><option value="cjdropshipping">CJ Dropshipping</option></select>
+            <button id="connectStoreBtn" class="btn-primary w-full">Connect Store & Start Trial</button>
+        </div>
+        <div class="mt-3 text-center text-sm">
+            <a href="/commander-dashboard" class="text-amber-500 font-bold">👑 Commander Login (Direct)</a>
+        </div>
+        <div id="authMessage" class="mt-3 text-xs text-center text-gray-500"></div>
+    </div>
+</div>
+
+<!-- ===== DASHBOARD ===== -->
+<div id="dashboardContainer" class="hidden min-h-screen pb-20">
+
+    <!-- TOP BAR -->
+    <header class="glass-card sticky top-0 z-50 flex justify-between items-center rounded-none border-b">
+        <div class="flex items-center gap-2 flex-wrap">
+            <i class="fas fa-bolt text-#7c3aed"></i>
+            <span class="font-bold">VektorFlow 15xr</span>
+            <span id="commanderBadge" class="hidden commander-badge">👑 COMMANDER</span>
+            <span id="trialBadge" class="text-xs bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full">● 7 DAYS LEFT</span>
+            <span id="statusBadge" class="text-xs bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full">● ONLINE</span>
+        </div>
+        <div class="flex items-center gap-2 flex-wrap">
+            <span id="storeDisplay" class="text-xs text-gray-500 hidden sm:inline"></span>
+            <button id="themeToggle" class="p-2 rounded-lg hover:bg-gray-100">🌙</button>
+            <a href="/commander/control" id="controlPanelBtn" class="hidden text-xs bg-amber-500 text-white px-3 py-1 rounded-lg">Control Panel</a>
+            <button id="logoutBtn" class="p-2 text-rose-500 hover:bg-rose-50 rounded-lg">🚪</button>
+        </div>
+    </header>
+
+    <!-- MAIN CONTENT -->
+    <div class="max-w-6xl mx-auto p-4">
+
+        <!-- HOME PAGE -->
+        <div id="homePage" class="page-section active">
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
+                <div class="glass-card"><div class="text-gray-400 text-xs">Products</div><div class="stat-value" id="statProducts">0</div></div>
+                <div class="glass-card"><div class="text-gray-400 text-xs">Campaigns</div><div class="stat-value" id="statCampaigns">2</div></div>
+                <div class="glass-card"><div class="text-gray-400 text-xs">Agents</div><div class="stat-value" id="statAgents">15</div></div>
+                <div class="glass-card"><div class="text-gray-400 text-xs">Memories</div><div class="stat-value" id="statMemories">0</div></div>
+            </div>
+
+            <!-- ALL API KEYS - PERSISTENT -->
+            <div class="glass-card mb-4">
+                <h5 class="font-bold flex items-center gap-2 mb-2">🔐 Your API Keys (Saved Automatically)</h5>
+                <p class="text-xs text-gray-500 mb-2">Keys are saved to your account. You only need to enter them once.</p>
+                <div id="providerKeysContainer" class="space-y-2">
+                    <div class="provider-row"><label>Groq</label><input type="password" id="key_groq" placeholder="gsk_..."><button onclick="saveProviderKey('groq')" class="btn-primary text-xs px-3 py-1">Save</button></div>
+                    <div class="provider-row"><label>DeepSeek</label><input type="password" id="key_deepseek" placeholder="sk-..."><button onclick="saveProviderKey('deepseek')" class="btn-primary text-xs px-3 py-1">Save</button></div>
+                    <div class="provider-row"><label>Gemini</label><input type="password" id="key_gemini" placeholder="AIza..."><button onclick="saveProviderKey('gemini')" class="btn-primary text-xs px-3 py-1">Save</button></div>
+                    <div class="provider-row"><label>Hugging Face</label><input type="password" id="key_huggingface" placeholder="hf_..."><button onclick="saveProviderKey('huggingface')" class="btn-primary text-xs px-3 py-1">Save</button></div>
+                    <div class="provider-row"><label>OpenAI</label><input type="password" id="key_openai" placeholder="sk-..."><button onclick="saveProviderKey('openai')" class="btn-primary text-xs px-3 py-1">Save</button></div>
+                    <div class="provider-row"><label>Anthropic</label><input type="password" id="key_anthropic" placeholder="sk-ant-..."><button onclick="saveProviderKey('anthropic')" class="btn-primary text-xs px-3 py-1">Save</button></div>
+                    <div class="provider-row"><label>Mistral</label><input type="password" id="key_mistral" placeholder="mistral_..."><button onclick="saveProviderKey('mistral')" class="btn-primary text-xs px-3 py-1">Save</button></div>
+                    <div class="provider-row"><label>Cohere</label><input type="password" id="key_cohere" placeholder="cohere_..."><button onclick="saveProviderKey('cohere')" class="btn-primary text-xs px-3 py-1">Save</button></div>
+                </div>
+                <div id="keysMessage" class="mt-2 text-xs"></div>
+            </div>
+
+            <!-- AI MODEL SELECTOR - DYNAMIC -->
+            <h5 class="text-sm font-bold text-gray-400 uppercase mb-2">Select AI Model</h5>
+            <div id="aiModelSelector" class="grid grid-cols-2 md:grid-cols-4 gap-2 mb-4">
+                <div class="text-gray-400 text-xs col-span-full text-center py-2">Add an API key to see models</div>
+            </div>
+
+            <!-- ASSIGN TASK -->
+            <h5 class="text-sm font-bold text-gray-400 uppercase mb-2">Assign Task to AI Agent</h5>
+            <div class="glass-card mb-4">
+                <select id="agentSelect" class="mb-2">
+                    <option value="Market Research Agent">Market Research</option>
+                    <option value="Trend Analysis Agent">Trend Analysis</option>
+                    <option value="Content Writer Agent">Content Writer</option>
+                    <option value="Campaign Optimizer">Campaign Optimizer</option>
+                    <option value="Data Analyst Agent">Data Analyst</option>
+                </select>
+                <textarea id="agentTaskInput" rows="2" placeholder="Describe the task..."></textarea>
+                <div class="flex gap-2 mt-2">
+                    <button id="assignTaskBtn" class="btn-primary flex-1">🚀 Assign Task</button>
+                    <button id="voiceTaskBtn" class="btn-primary">🎤</button>
+                </div>
+                <div id="taskStatus" class="text-xs text-gray-400 mt-1"></div>
+            </div>
+
+            <!-- TASK RESULTS -->
+            <h5 class="text-sm font-bold text-gray-400 uppercase mb-2">Task Results</h5>
+            <div id="taskResultsContainer" class="glass-card max-h-80 overflow-y-auto">
+                <div class="text-gray-400 text-xs text-center py-4">Tasks will appear here</div>
+            </div>
+        </div>
+
+        <!-- VEKTOR PAGE -->
+        <div id="vektorPage" class="page-section">
+            <div class="glass-card h-[500px] flex flex-col">
+                <div class="flex justify-between items-center mb-2">
+                    <div class="flex items-center gap-2">
+                        <div class="w-8 h-8 rounded-full bg-#7c3aed text-white flex items-center justify-center font-bold">V</div>
+                        <div><h5 class="font-bold">Vektor</h5><span class="text-xs text-emerald-500">● Online</span></div>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <span class="memory-chip"><i class="fas fa-brain"></i> <span id="memoryCount">0</span> memories</span>
+                        <button onclick="document.getElementById('vektorMessages').innerHTML='<div class=\"text-gray-400 text-xs text-center py-4\">Conversation cleared</div>'" class="text-xs text-gray-400">Clear</button>
+                    </div>
+                </div>
+                <div id="vektorMessages" class="flex-1 overflow-y-auto space-y-2 p-2 bg-gray-50 rounded-xl">
+                    <div class="vektor-msg-ai">👋 I'm Vektor. I remember everything you tell me. What would you like to do?</div>
+                </div>
+                <div class="flex gap-2 mt-2">
+                    <input type="text" id="vektorInput" placeholder="Ask Vektor..." onkeydown="if(event.key==='Enter') sendVektorMessage()">
+                    <button id="vektorVoiceBtn" class="btn-primary">🎤</button>
+                    <button id="vektorSendBtn" class="btn-primary">📤</button>
+                </div>
+                <div class="text-[10px] text-gray-400 mt-1 flex gap-2 flex-wrap">
+                    <span><kbd class="px-1 bg-gray-200 rounded">Hey Vektor</kbd> wake word</span>
+                    <span><kbd class="px-1 bg-gray-200 rounded">Remember that...</kbd> learn</span>
+                    <span><kbd class="px-1 bg-gray-200 rounded">What do you know?</kbd> recall</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- GTM PAGE -->
+        <div id="gtmPage" class="page-section">
+            <div class="space-y-3">
+                <div class="glass-card"><h5>📧 Outreach Sequence</h5><input id="gtmOutreachGoal" placeholder="Your goal"><button id="gtmGenerateSequence" class="btn-primary w-full mt-2">Generate</button><div id="gtmSequenceResult" class="text-sm mt-2"></div></div>
+                <div class="glass-card"><h5>📋 Launch Checklist</h5><input id="gtmLaunchProduct" placeholder="Product name"><button id="gtmGenerateLaunch" class="btn-primary w-full mt-2">Generate</button><div id="gtmLaunchResult" class="text-sm mt-2"></div></div>
+                <div class="glass-card"><h5>💰 Pricing Helper</h5><textarea id="gtmPricingProducts" rows="2" placeholder='[{"name":"Product","cost":10}]'></textarea><button id="gtmGeneratePricing" class="btn-primary w-full mt-2">Suggest</button><div id="gtmPricingResult" class="text-sm mt-2"></div></div>
+                <div class="glass-card"><h5>🎯 AI SDR</h5><input id="gtmSDRProduct" placeholder="What are you selling?"><button id="gtmGenerateSDR" class="btn-primary w-full mt-2">Research</button><div id="gtmSDRResult" class="text-sm mt-2"></div></div>
+                <div class="glass-card"><h5>🔄 Content Repurposer</h5><textarea id="gtmContentInput" rows="2" placeholder="Paste content here..."></textarea><button id="gtmRepurposeContent" class="btn-primary w-full mt-2">Repurpose</button><div id="gtmContentResult" class="text-sm mt-2"></div></div>
+            </div>
+        </div>
+
+        <!-- CATALOG PAGE -->
+        <div id="catalogPage" class="page-section">
+            <div class="glass-card"><h5>📦 Upload Product Catalog</h5><input type="file" id="catalogFile" accept=".json"><input type="text" id="storeId" placeholder="Store ID" value="test-store"><button id="uploadCatalogBtn" class="btn-primary w-full mt-2">Upload</button><div id="uploadResult" class="text-sm mt-2"></div></div>
+        </div>
+
+        <!-- AGENTS PAGE -->
+        <div id="agentsPage" class="page-section">
+            <div class="glass-card"><h5>🤖 AI Agents</h5><div id="agentsList" class="space-y-1 mt-2"><div class="flex justify-between p-2 border-b"><span>Market Research</span><span class="text-emerald-500">Idle</span></div><div class="flex justify-between p-2 border-b"><span>Trend Analysis</span><span class="text-emerald-500">Idle</span></div><div class="flex justify-between p-2 border-b"><span>Content Writer</span><span class="text-emerald-500">Idle</span></div><div class="flex justify-between p-2 border-b"><span>Campaign Optimizer</span><span class="text-emerald-500">Idle</span></div><div class="flex justify-between p-2 border-b"><span>Data Analyst</span><span class="text-emerald-500">Idle</span></div></div></div>
+        </div>
+
+        <!-- CAMPAIGNS PAGE -->
+        <div id="campaignsPage" class="page-section">
+            <div class="glass-card"><h5>🔥 Trending Products</h5><button id="getTrendsBtn" class="btn-primary w-full mt-2">Get Trends</button><div id="trendsResult" class="text-sm mt-2"></div></div>
+        </div>
+
+    </div>
+
+    <!-- BOTTOM NAV -->
+    <nav class="bottom-nav">
+        <button class="nav-tab active" data-page="home"><i class="fas fa-home"></i><span>Home</span></button>
+        <button class="nav-tab" data-page="vektor"><i class="fas fa-brain"></i><span>Vektor</span></button>
+        <button class="nav-tab" data-page="gtm"><i class="fas fa-rocket"></i><span>GTM</span></button>
+        <button class="nav-tab" data-page="catalog"><i class="fas fa-box"></i><span>Catalog</span></button>
+        <button class="nav-tab" data-page="agents"><i class="fas fa-robot"></i><span>Agents</span></button>
+        <button class="nav-tab" data-page="campaigns"><i class="fas fa-chart-line"></i><span>Campaigns</span></button>
+    </nav>
+</div>
+
+<script>
+    const BASE = window.location.origin;
+    let authToken = localStorage.getItem('authToken');
+    let selectedModel = localStorage.getItem('selectedModel') || 'llama-3.3-70b-versatile';
+    let vektorHistory = [];
+
+    // ===== TOKEN CHECK =====
+    const urlParams = new URLSearchParams(window.location.search);
+    const tokenParam = urlParams.get('token');
+    if (tokenParam) {
+        localStorage.setItem('authToken', tokenParam);
+        authToken = tokenParam;
+        window.history.replaceState({}, document.title, window.location.pathname);
+    }
+
+    // ===== TOAST =====
+    function showToast(msg, type='info') {
+        const colors = {success:'toast-success', error:'toast-error', warning:'toast-warning', info:'toast-info'};
+        const t = document.createElement('div');
+        t.className = `toast ${colors[type] || colors.info}`;
+        t.textContent = msg;
+        document.body.appendChild(t);
+        setTimeout(() => t.remove(), 5000);
+    }
+
+    // ===== API CALL =====
+    async function callApi(endpoint, method='GET', body=null) {
+        const headers = {'Content-Type':'application/json'};
+        if (authToken) headers['api-key'] = authToken;
+        try {
+            const res = await fetch(`${BASE}${endpoint}`, {method, headers, body: body ? JSON.stringify(body) : undefined});
+            const data = await res.json();
+            if (res.status === 429) { showToast('Rate limit reached. Please wait.', 'warning'); }
+            return {res, data};
+        } catch(err) {
+            showToast(`Network error: ${err.message}`, 'error');
+            return {res: {status:500}, data: {error: err.message}};
+        }
+    }
+
+    // ===== DARK MODE =====
+    if (localStorage.getItem('theme') === 'dark') document.documentElement.classList.add('dark');
+    document.getElementById('themeToggle')?.addEventListener('click', () => {
+        document.documentElement.classList.toggle('dark');
+        localStorage.setItem('theme', document.documentElement.classList.contains('dark') ? 'dark' : 'light');
+    });
+
+    // ===== SAVE KEY =====
+    async function saveProviderKey(provider) {
+        const input = document.getElementById(`key_${provider}`);
+        const apiKey = input.value.trim();
+        if (!apiKey) { showToast('Enter an API key', 'warning'); return; }
+        const {res, data} = await callApi('/user/llm-keys', 'POST', {provider, api_key: apiKey});
+        if (res.ok) { showToast(`✅ ${provider} key saved`, 'success'); loadSavedKeys(); loadAvailableModels(); }
+        else showToast(`❌ ${data.error || 'Failed'}`, 'error');
+    }
+
+    // ===== LOAD SAVED KEYS (PERSISTENT) =====
+    async function loadSavedKeys() {
+        if (!authToken) {
+            console.log('No auth token, skipping loadSavedKeys');
+            return;
+        }
+        try {
+            const {res, data} = await callApi('/user/llm-keys', 'GET');
+            if (res.ok && data && data.keys) {
+                for (const [provider, key] of Object.entries(data.keys)) {
+                    const input = document.getElementById(`key_${provider}`);
+                    if (input) {
+                        input.value = key;
+                        console.log(`Loaded ${provider} key from database`);
+                    }
+                }
+            } else {
+                console.log('No saved keys found or error loading keys');
+            }
+        } catch(e) {
+            console.error('Error loading saved keys:', e);
+        }
+    }
+
+    // ===== LOAD AVAILABLE MODELS (DYNAMIC) =====
+    async function loadAvailableModels() {
+        const container = document.getElementById('aiModelSelector');
+        if (!container) return;
+        const {res, data} = await callApi('/user/llm-keys', 'GET');
+        if (!res.ok || !data || !data.keys || Object.keys(data.keys).length === 0) {
+            container.innerHTML = '<div class="text-gray-400 text-xs col-span-full text-center py-2">Add an API key to see models</div>';
+            return;
+        }
+        const providerModels = {
+            groq: ['llama-3.3-70b-versatile', 'llama-3.1-8b-instant', 'openai/gpt-oss-120b'],
+            deepseek: ['deepseek-v4-pro', 'deepseek-v4-flash', 'deepseek-chat'],
+            gemini: ['gemini-2.0-flash-exp', 'gemini-1.5-pro'],
+            huggingface: ['meta-llama/Llama-3.2-1B-Instruct', 'meta-llama/Meta-Llama-3-70B-Instruct'],
+            openai: ['gpt-4o', 'gpt-4o-mini'],
+            anthropic: ['claude-3-5-sonnet-latest', 'claude-3-opus-latest'],
+            mistral: ['mistral-large-latest', 'mistral-small-latest'],
+            cohere: ['command-r-plus', 'command-r']
+        };
+        const icons = {groq:'⚡', deepseek:'🔍', gemini:'⭐', huggingface:'🤗', openai:'🤖', anthropic:'🧠', mistral:'🌀', cohere:'📡'};
+        const colors = {groq:'text-amber-500', deepseek:'text-blue-500', gemini:'text-red-500', huggingface:'text-yellow-500', openai:'text-emerald-500', anthropic:'text-indigo-500', mistral:'text-purple-500', cohere:'text-cyan-500'};
+        let html = '';
+        let hasModels = false;
+        for (const [provider, models] of Object.entries(providerModels)) {
+            if (!data.keys[provider]) continue;
+            for (const model of models) {
+                hasModels = true;
+                const sel = selectedModel === model ? 'border-#7c3aed bg-#f3f0ff' : 'border-gray-200 bg-white';
+                html += `<div class="cursor-pointer border rounded-xl p-2 text-center ${sel} hover:border-#7c3aed" data-model="${model}">
+                    <div class="${colors[provider] || 'text-gray-500'}">${icons[provider] || '🧠'}</div>
+                    <div class="font-bold text-sm">${model.replace(/-/g, ' ').replace(/\//g, ' / ')}</div>
+                    <span class="text-[10px] text-gray-400">${provider}</span>
+                </div>`;
+            }
+        }
+        container.innerHTML = hasModels ? html : '<div class="text-gray-400 text-xs col-span-full text-center py-2">No models available</div>';
+        document.querySelectorAll('.ai-model-card').forEach(c => {
+            c.addEventListener('click', function() {
+                selectedModel = this.dataset.model;
+                localStorage.setItem('selectedModel', selectedModel);
+                document.querySelectorAll('.ai-model-card').forEach(c => c.className = c.className.replace(/border-#7c3aed bg-#f3f0ff/g, 'border-gray-200 bg-white'));
+                this.className += ' border-#7c3aed bg-#f3f0ff';
+                showToast(`Selected: ${selectedModel}`, 'info');
+            });
+        });
+    }
+
+    // ===== ASSIGN TASK =====
+    async function assignTask() {
+        const agent = document.getElementById('agentSelect').value;
+        const task = document.getElementById('agentTaskInput').value;
+        if (!task) { showToast('Please describe a task', 'warning'); return; }
+        document.getElementById('taskStatus').innerHTML = '⏳ Working...';
+        const {res, data} = await callApi('/agent/run', 'POST', {agent_name: agent, task, model: selectedModel});
+        const container = document.getElementById('taskResultsContainer');
+        if (container.innerHTML.includes('Tasks will appear here')) container.innerHTML = '';
+        if (res.ok && data.success) {
+            const time = new Date().toLocaleTimeString();
+            container.innerHTML = `<div class="border-l-4 border-#7c3aed p-2 bg-gray-50 rounded mb-2"><div class="text-xs font-bold">${agent} <span class="text-gray-400">${time}</span></div><div class="text-xs text-gray-600">📝 ${task}</div><div class="text-sm mt-1">${data.response}</div></div>` + container.innerHTML;
+            document.getElementById('taskStatus').innerHTML = '✅ Done';
+        } else {
+            document.getElementById('taskStatus').innerHTML = `❌ ${data.error || 'Failed'}`;
+            showToast(data.error || 'Task failed', 'error');
+        }
+        setTimeout(() => document.getElementById('taskStatus').innerHTML = '', 3000);
+    }
+
+    // ===== VEKTOR CHAT =====
+    async function sendVektorMessage() {
+        const input = document.getElementById('vektorInput');
+        const msg = input.value.trim();
+        if (!msg) return;
+        input.value = '';
+        const container = document.getElementById('vektorMessages');
+        container.innerHTML += `<div class="vektor-msg-user">${msg}</div>`;
+        container.innerHTML += `<div class="vektor-msg-ai">⏳ Thinking...</div>`;
+        container.scrollTop = container.scrollHeight;
+        const {res, data} = await callApi('/vektor/chat', 'POST', {message: msg, history: vektorHistory});
+        const msgs = container.querySelectorAll('.vektor-msg-ai');
+        const last = msgs[msgs.length - 1];
+        if (last) last.remove();
+        if (res.ok && data) {
+            container.innerHTML += `<div class="vektor-msg-ai">${data.response || 'Done.'}</div>`;
+            vektorHistory.push({role: 'user', content: msg});
+            vektorHistory.push({role: 'assistant', content: data.response || ''});
+            if (data.learnings) loadMemoryCount();
+        } else {
+            container.innerHTML += `<div class="vektor-msg-ai">❌ Error: ${data.error || 'Request failed'}</div>`;
+        }
+        container.scrollTop = container.scrollHeight;
+    }
+
+    async function loadMemoryCount() {
+        if (!authToken) return;
+        const {res, data} = await callApi('/vektor/memory', 'GET');
+        if (res.ok && data && data.memory) {
+            document.getElementById('memoryCount').innerText = data.memory.length;
+        }
+    }
+
+    // ===== VOICE =====
+    let recognition = null;
+    if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
+        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+        recognition = new SpeechRecognition();
+        recognition.lang = 'en-US';
+        recognition.interimResults = false;
+        recognition.onresult = (event) => {
+            const transcript = event.results[0][0].transcript;
+            document.getElementById('vektorInput').value = transcript;
+            sendVektorMessage();
+        };
+    }
+
+    document.getElementById('vektorVoiceBtn')?.addEventListener('click', () => {
+        if (!authToken) { showToast('Please log in', 'warning'); return; }
+        if (recognition) {
+            document.getElementById('vektorStatus').innerHTML = '🎙️ Listening...';
+            recognition.start();
+        } else {
+            showToast('Voice not supported on this browser', 'error');
+        }
+    });
+    document.getElementById('voiceTaskBtn')?.addEventListener('click', () => {
+        if (!authToken) { showToast('Please log in', 'warning'); return; }
+        if (recognition) {
+            document.getElementById('taskStatus').innerHTML = '🎙️ Listening...';
+            recognition.start();
+        } else {
+            showToast('Voice not supported on this browser', 'error');
+        }
+    });
+
+    // ===== NAVIGATION =====
+    document.querySelectorAll('.nav-tab').forEach(tab => {
+        tab.addEventListener('click', function() {
+            document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
+            this.classList.add('active');
+            const page = this.dataset.page;
+            document.querySelectorAll('.page-section').forEach(s => s.classList.remove('active'));
+            const target = document.getElementById(`${page}Page`);
+            if (target) target.classList.add('active');
+        });
+    });
+
+    // ===== LOGIN =====
+    async function checkAuth() {
+        if (!authToken) {
+            console.log('No auth token found');
+            return;
+        }
+        try {
+            const {res, data} = await callApi('/user/stores', 'GET');
+            if (res.ok) {
+                document.getElementById('authPage').style.display = 'none';
+                document.getElementById('dashboardContainer').style.display = 'block';
+                if (data.stores && data.stores.length > 0) {
+                    document.getElementById('storeDisplay').innerText = data.stores[0].store_url || 'Connected Store';
+                }
+                // LOAD SAVED KEYS ON LOGIN
+                await loadSavedKeys();
+                await loadAvailableModels();
+                await loadMemoryCount();
+                console.log('Dashboard loaded, keys restored');
+            } else {
+                console.log('Auth failed, redirecting to login');
+                document.getElementById('authPage').style.display = 'block';
+                document.getElementById('dashboardContainer').style.display = 'none';
+            }
+        } catch(e) {
+            console.error('Error checking auth:', e);
+        }
+    }
+
+    document.getElementById('logoutBtn')?.addEventListener('click', () => {
+        localStorage.removeItem('authToken');
+        window.location.reload();
+    });
+
+    document.getElementById('assignTaskBtn')?.addEventListener('click', assignTask);
+
+    document.getElementById('vektorSendBtn')?.addEventListener('click', sendVektorMessage);
+    document.getElementById('vektorInput')?.addEventListener('keydown', (e) => { if (e.key === 'Enter') sendVektorMessage(); });
+
+    // ===== GTM FUNCTIONS =====
+    async function gtmCall(endpoint, resultId, body) {
+        document.getElementById(resultId).innerHTML = '⏳ Generating...';
+        const {res, data} = await callApi(endpoint, 'POST', body);
+        document.getElementById(resultId).innerHTML = `<pre class="text-xs whitespace-pre-wrap">${data.response || data.error}</pre>`;
+    }
+    document.getElementById('gtmGenerateSequence')?.addEventListener('click', () => {
+        const goal = document.getElementById('gtmOutreachGoal').value;
+        if (!goal) return showToast('Enter a goal', 'warning');
+        gtmCall('/outreach/generate', 'gtmSequenceResult', {goal});
+    });
+    document.getElementById('gtmGenerateLaunch')?.addEventListener('click', () => {
+        const product = document.getElementById('gtmLaunchProduct').value;
+        if (!product) return showToast('Enter a product name', 'warning');
+        gtmCall('/launch/generate', 'gtmLaunchResult', {product});
+    });
+    document.getElementById('gtmGeneratePricing')?.addEventListener('click', () => {
+        try { const products = JSON.parse(document.getElementById('gtmPricingProducts').value); gtmCall('/pricing/suggest', 'gtmPricingResult', {products}); }
+        catch(e) { showToast('Invalid JSON format', 'error'); }
+    });
+    document.getElementById('gtmGenerateSDR')?.addEventListener('click', () => {
+        const product = document.getElementById('gtmSDRProduct').value;
+        if (!product) return showToast('Enter a product name', 'warning');
+        gtmCall('/sdr/research', 'gtmSDRResult', {product});
+    });
+    document.getElementById('gtmRepurposeContent')?.addEventListener('click', () => {
+        const content = document.getElementById('gtmContentInput').value;
+        if (!content) return showToast('Enter content', 'warning');
+        gtmCall('/content/repurpose', 'gtmContentResult', {content});
+    });
+
+    // ===== CATALOG =====
+    document.getElementById('uploadCatalogBtn')?.addEventListener('click', async () => {
+        const file = document.getElementById('catalogFile').files[0];
+        if (!file) return showToast('Select a JSON file', 'warning');
+        const text = await file.text();
+        const products = JSON.parse(text);
+        const storeId = document.getElementById('storeId').value;
+        const {data} = await callApi('/ecommerce/catalog', 'POST', {store_id: storeId, products});
+        document.getElementById('uploadResult').innerHTML = `<pre class="bg-gray-100 dark:bg-gray-900 p-2 rounded text-xs">✅ ${JSON.stringify(data, null, 2)}</pre>`;
+        document.getElementById('statProducts').innerText = products.length;
+    });
+
+    document.getElementById('getTrendsBtn')?.addEventListener('click', async () => {
+        const storeId = document.getElementById('storeId').value || 'test-store';
+        const {data} = await callApi(`/ecommerce/trends/${storeId}`, 'GET');
+        document.getElementById('trendsResult').innerHTML = `<pre class="bg-gray-100 dark:bg-gray-900 p-2 rounded text-xs">${JSON.stringify(data, null, 2)}</pre>`;
+    });
+
+    // ===== OAUTH =====
+    const oauthCode = urlParams.get('code');
+    const shop = urlParams.get('shop');
+    const state = urlParams.get('state');
+    if (oauthCode && shop && state) {
+        const platform = localStorage.getItem('oauth_platform') || 'shopify';
+        fetch(`${BASE}/store/callback?code=${oauthCode}&shop=${shop}&state=${state}&platform=${platform}`)
+            .then(res => res.json())
+            .then(data => {
+                if (data.access_token) {
+                    localStorage.setItem('authToken', data.access_token);
+                    localStorage.removeItem('oauth_state');
+                    window.location.href = '/';
+                } else {
+                    document.getElementById('authMessage').innerHTML = `<span class="text-rose-500">${data.error || 'Authorization failed'}</span>`;
+                }
+            });
+    }
+
+    // ===== START =====
+    checkAuth();
+</script>
+</body>
+</html>
