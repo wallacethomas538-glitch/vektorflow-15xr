@@ -17,5 +17,5 @@ pgvector==0.3.0
 ecomlib
 stockpyl
 apscheduler==3.10.4
-langfuse==2.0.0
+langfuse
 chromadb==1.0.0
