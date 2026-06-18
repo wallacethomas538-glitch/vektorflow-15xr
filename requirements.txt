@@ -18,4 +18,4 @@ ecomlib
 stockpyl
 apscheduler==3.10.4
 langfuse==2.49.0
-TTS
+coqui-tts
