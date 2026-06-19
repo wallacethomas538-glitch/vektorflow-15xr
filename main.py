@@ -389,6 +389,7 @@ async def wakeup():
     return {"status": "awake", "timestamp": datetime.utcnow().isoformat()}
 
 # ============ RUN ============
+
 if __name__ == "__main__":
     import uvicorn
     port = int(os.getenv("PORT", 10000))
