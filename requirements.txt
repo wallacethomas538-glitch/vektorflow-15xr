@@ -7,3 +7,4 @@ python-dotenv==1.0.0
 langgraph
 pyyaml
 pyjwt
+bcrypt
