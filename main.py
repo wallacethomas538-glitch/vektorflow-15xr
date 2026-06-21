@@ -42,8 +42,6 @@ logger.setLevel(logging.INFO)
 # ============ ADMIN API KEY ============
 ADMIN_API_KEY = os.environ.get("ADMIN_API_KEY", "vektorflow-admin-2026-secure-key")
 
-# ============ MIDDLEWARE ============
-app.add_middleware(APIKeyMiddleware, admin_key=ADMIN_API_KEY)
 
 # ============ STATIC FILES ============
 STATIC_DIR = os.path.join(os.path.dirname(__file__), "static")
