@@ -1,0 +1,520 @@
+"""
+VektorFlow 15xr - SEO Optimization Engine
+Provides AI-powered SEO optimization for product listings,
+including keyword research, title generation, meta descriptions,
+URL slugs, and structured data (schema markup).
+"""
+
+import re
+import json
+import logging
+from typing import List, Dict, Any, Optional
+from urllib.parse import quote
+from datetime import datetime
+
+# ============ IMPORTS ============
+from llm_handler import call_llm
+from database import (
+    save_memory,
+    get_memory,
+    get_user_preferences,
+    save_user_preferences,
+    add_task_history,
+    update_task_result
+)
+
+logger = logging.getLogger("vektorflow")
+
+# ============ CONFIGURATION ============
+DEFAULT_KEYWORDS = [
+    {"keyword": "premium quality", "volume": 1200, "difficulty": 35},
+    {"keyword": "best price", "volume": 800, "difficulty": 25},
+    {"keyword": "top rated", "volume": 600, "difficulty": 30},
+]
+
+DEFAULT_TAXONOMY = {
+    "electronics": ["gadgets", "accessories", "devices"],
+    "home": ["decor", "furniture", "kitchen"],
+    "fashion": ["apparel", "footwear", "jewelry"],
+    "beauty": ["skincare", "cosmetics", "haircare"],
+    "sports": ["fitness", "outdoor", "equipment"],
+}
+
+# ============ KEYWORD EXTRACTION ============
+
+def extract_keywords(text: str) -> List[str]:
+    """
+    Extract potential keywords from product title or description.
+    
+    Args:
+        text: Product title or description
+    
+    Returns:
+        List of extracted keywords
+    """
+    # Remove common stopwords and special characters
+    stopwords = {"the", "a", "an", "of", "for", "on", "at", "to", "in", "with", "without", "and", "or", "but"}
+    words = re.findall(r'\b[a-zA-Z]{3,}\b', text.lower())
+    keywords = [w for w in words if w not in stopwords]
+    
+    # Extract n-grams (phrases of 2-3 words)
+    bigrams = []
+    for i in range(len(words) - 1):
+        bigrams.append(f"{words[i]} {words[i+1]}")
+    
+    # Return combined list
+    all_keywords = keywords + bigrams
+    # Remove duplicates while preserving order
+    seen = set()
+    unique_keywords = []
+    for k in all_keywords:
+        if k not in seen and len(k) > 2:
+            seen.add(k)
+            unique_keywords.append(k)
+    
+    return unique_keywords[:10]  # Limit to top 10
+
+# ============ SEARCH VOLUME SIMULATION ============
+
+def simulate_search_volume(keyword: str) -> int:
+    """
+    Simulate search volume for a keyword based on length and specificity.
+    
+    Args:
+        keyword: The keyword to evaluate
+    
+    Returns:
+        Simulated monthly search volume
+    """
+    # Longer, more specific keywords = lower volume
+    word_count = len(keyword.split())
+    if word_count == 1:
+        base_volume = 2000
+    elif word_count == 2:
+        base_volume = 1000
+    elif word_count == 3:
+        base_volume = 500
+    else:
+        base_volume = 200
+    
+    # Add randomness
+    import random
+    variation = random.randint(-200, 300)
+    return max(50, base_volume + variation)
+
+def simulate_keyword_difficulty(keyword: str) -> int:
+    """
+    Simulate keyword difficulty based on length and competitiveness.
+    
+    Args:
+        keyword: The keyword to evaluate
+    
+    Returns:
+        Difficulty score (0-100)
+    """
+    word_count = len(keyword.split())
+    if word_count == 1:
+        difficulty = 60
+    elif word_count == 2:
+        difficulty = 45
+    elif word_count == 3:
+        difficulty = 30
+    else:
+        difficulty = 20
+    
+    # Add randomness
+    import random
+    variation = random.randint(-15, 15)
+    return max(5, min(95, difficulty + variation))
+
+# ============ AI-POWERED SEO GENERATION ============
+
+async def generate_seo_metadata(
+    product_title: str,
+    description: str,
+    category: str,
+    keywords: List[str],
+    user_keys: Dict[str, str],
+    preferences: Dict[str, Any] = None
+) -> Dict[str, Any]:
+    """
+    Generate SEO metadata using AI.
+    
+    Args:
+        product_title: Product title
+        description: Product description
+        category: Product category
+        keywords: List of target keywords
+        user_keys: User's LLM API keys
+        preferences: User preferences (optional)
+    
+    Returns:
+        Dict with generated SEO metadata
+    """
+    preferences = preferences or {}
+    response_style = preferences.get("response_style", "concise")
+    
+    prompt = f"""
+    You are an expert SEO copywriter. Generate optimized SEO metadata for the following product.
+    
+    Product Title: {product_title}
+    Product Description: {description}
+    Category: {category}
+    Target Keywords: {', '.join(keywords[:5])}
+    Response Style: {response_style}
+    
+    Generate:
+    1. SEO Title (max 60 characters)
+    2. Meta Description (max 155 characters)
+    3. URL Slug (hyphenated, lowercase, max 60 chars)
+    4. Schema Markup (JSON-LD for Product)
+    5. 3-5 secondary keywords with estimated search volume and difficulty
+    
+    Return ONLY valid JSON with this structure:
+    {{
+        "seo_title": "...",
+        "meta_description": "...",
+        "url_slug": "...",
+        "schema_markup": {{"@context": "https://schema.org/", "@type": "Product", ...}},
+        "secondary_keywords": [
+            {{"keyword": "...", "volume": 1000, "difficulty": 30}},
+            ...
+        ]
+    }}
+    """
+    
+    try:
+        result = await call_llm(prompt, "llama-3.3-70b-versatile", user_keys)
+        response_text = result.get("response", "{}")
+        
+        # Extract JSON from response
+        json_match = re.search(r'\{[\s\S]*\}', response_text)
+        if json_match:
+            seo_data = json.loads(json_match.group())
+        else:
+            seo_data = json.loads(response_text)
+        
+        # Ensure required fields exist
+        seo_data.setdefault("seo_title", product_title[:60])
+        seo_data.setdefault("meta_description", description[:155] if description else f"Shop {product_title} online")
+        seo_data.setdefault("url_slug", quote(product_title.lower().replace(" ", "-")))
+        seo_data.setdefault("schema_markup", {
+            "@context": "https://schema.org/",
+            "@type": "Product",
+            "name": product_title,
+            "description": description[:200] if description else "",
+            "category": category
+        })
+        seo_data.setdefault("secondary_keywords", DEFAULT_KEYWORDS)
+        
+        return seo_data
+        
+    except Exception as e:
+        logger.error(f"SEO metadata generation failed: {e}")
+        # Fallback to rule-based generation
+        return await generate_seo_metadata_fallback(product_title, description, category, keywords)
+
+# ============ FALLBACK SEO GENERATION ============
+
+async def generate_seo_metadata_fallback(
+    product_title: str,
+    description: str,
+    category: str,
+    keywords: List[str]
+) -> Dict[str, Any]:
+    """
+    Rule-based fallback for SEO metadata generation.
+    
+    Args:
+        product_title: Product title
+        description: Product description
+        category: Product category
+        keywords: List of target keywords
+    
+    Returns:
+        Dict with generated SEO metadata
+    """
+    # Generate SEO title (max 60 chars)
+    seo_title = f"{product_title} - Premium Quality"
+    if len(seo_title) > 60:
+        seo_title = product_title[:57] + "..."
+    
+    # Generate meta description (max 155 chars)
+    meta_description = description[:155] if description else f"Shop {product_title} online"
+    if len(meta_description) < 50 and keywords:
+        meta_description = f"Find the best {keywords[0]} - Shop now for premium quality."
+    
+    # Generate URL slug
+    url_slug = quote(product_title.lower().replace(" ", "-"))
+    if len(url_slug) > 60:
+        url_slug = url_slug[:60]
+    
+    # Generate schema markup
+    schema_markup = {
+        "@context": "https://schema.org/",
+        "@type": "Product",
+        "name": product_title,
+        "description": description[:200] if description else "",
+        "category": category,
+        "offers": {
+            "@type": "Offer",
+            "priceCurrency": "USD",
+            "price": "29.99",
+            "availability": "https://schema.org/InStock"
+        }
+    }
+    
+    # Generate secondary keywords
+    extracted_keywords = extract_keywords(f"{product_title} {description}")
+    secondary_keywords = []
+    for kw in extracted_keywords[:5]:
+        secondary_keywords.append({
+            "keyword": kw,
+            "volume": simulate_search_volume(kw),
+            "difficulty": simulate_keyword_difficulty(kw)
+        })
+    
+    return {
+        "seo_title": seo_title,
+        "meta_description": meta_description,
+        "url_slug": url_slug,
+        "schema_markup": schema_markup,
+        "secondary_keywords": secondary_keywords or DEFAULT_KEYWORDS
+    }
+
+# ============ BULK SEO OPTIMIZATION ============
+
+async def bulk_optimize_seo(
+    products: List[Dict[str, str]],
+    user_keys: Dict[str, str],
+    email: str,
+    preferences: Dict[str, Any] = None
+) -> Dict[str, Any]:
+    """
+    Optimize multiple products in batch.
+    
+    Args:
+        products: List of product dicts with title, description, category
+        user_keys: User's LLM API keys
+        email: User email for memory tracking
+        preferences: User preferences (optional)
+    
+    Returns:
+        Dict with optimization results
+    """
+    results = []
+    task_id = add_task_history(email, "seo_optimizer", f"Bulk SEO optimization for {len(products)} products")
+    
+    try:
+        for idx, product in enumerate(products):
+            title = product.get("title", product.get("product_title", "Unknown Product"))
+            description = product.get("description", product.get("supplier_description", ""))
+            category = product.get("category", "general")
+            raw_keywords = product.get("raw_keywords", [])
+            
+            # Extract keywords if not provided
+            if not raw_keywords:
+                raw_keywords = extract_keywords(f"{title} {description}")
+            
+            # Generate SEO metadata
+            seo_data = await generate_seo_metadata(
+                product_title=title,
+                description=description,
+                category=category,
+                keywords=raw_keywords,
+                user_keys=user_keys,
+                preferences=preferences
+            )
+            
+            # Save to memory
+            memory_key = f"seo_{title[:30].lower().replace(' ', '_')}"
+            save_memory(email, memory_key, json.dumps(seo_data))
+            
+            results.append({
+                "product": title,
+                "seo_title": seo_data.get("seo_title"),
+                "meta_description": seo_data.get("meta_description"),
+                "url_slug": seo_data.get("url_slug"),
+                "schema_markup": seo_data.get("schema_markup"),
+                "keywords": seo_data.get("secondary_keywords", []),
+                "status": "success"
+            })
+            
+            # Update progress
+            if idx % 5 == 0:
+                update_task_result(task_id, json.dumps({
+                    "progress": f"{idx + 1}/{len(products)}",
+                    "current": title
+                }), status="in_progress")
+        
+        # Mark task as completed
+        update_task_result(task_id, json.dumps({
+            "total": len(products),
+            "completed": len(results),
+            "results": results
+        }), status="completed")
+        
+        return {
+            "status": "success",
+            "total": len(products),
+            "completed": len(results),
+            "results": results,
+            "task_id": task_id
+        }
+        
+    except Exception as e:
+        logger.error(f"Bulk SEO optimization failed: {e}")
+        update_task_result(task_id, json.dumps({"error": str(e)}), status="failed")
+        return {
+            "status": "error",
+            "message": str(e),
+            "task_id": task_id
+        }
+
+# ============ SEO SCORING ============
+
+def score_seo_metadata(seo_data: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Score SEO metadata and provide improvement suggestions.
+    
+    Args:
+        seo_data: SEO metadata dict
+    
+    Returns:
+        Dict with scores and suggestions
+    """
+    scores = {}
+    suggestions = []
+    
+    # Score SEO title
+    title = seo_data.get("seo_title", "")
+    title_length = len(title)
+    if 50 <= title_length <= 60:
+        scores["title_score"] = 100
+    elif 40 <= title_length <= 69:
+        scores["title_score"] = 80
+        suggestions.append("Title length is good but could be optimized to 50-60 characters.")
+    else:
+        scores["title_score"] = 50
+        suggestions.append(f"Title is {title_length} characters. Aim for 50-60 characters.")
+    
+    # Score meta description
+    meta_desc = seo_data.get("meta_description", "")
+    meta_length = len(meta_desc)
+    if 120 <= meta_length <= 155:
+        scores["meta_score"] = 100
+    elif 100 <= meta_length <= 159:
+        scores["meta_score"] = 80
+        suggestions.append("Meta description length is good but could be optimized to 120-155 characters.")
+    else:
+        scores["meta_score"] = 50
+        suggestions.append(f"Meta description is {meta_length} characters. Aim for 120-155 characters.")
+    
+    # Score keyword presence
+    keywords = seo_data.get("secondary_keywords", [])
+    if keywords:
+        scores["keyword_score"] = 80
+        suggestions.append("Keywords present. Consider adding primary keyword to title and description.")
+    else:
+        scores["keyword_score"] = 30
+        suggestions.append("No keywords found. Add target keywords to improve visibility.")
+    
+    # Score schema markup
+    schema = seo_data.get("schema_markup", {})
+    if schema.get("@type") == "Product":
+        scores["schema_score"] = 100
+    else:
+        scores["schema_score"] = 50
+        suggestions.append("Schema markup incomplete. Add product schema for better search visibility.")
+    
+    # Calculate total score
+    total_score = sum(scores.values()) / len(scores) if scores else 0
+    
+    return {
+        "total_score": round(total_score, 1),
+        "scores": scores,
+        "suggestions": suggestions,
+        "improvement_needed": total_score < 70
+    }
+
+# ============ MAIN ENTRY POINT ============
+
+async def optimize_seo(
+    product_title: str,
+    supplier_description: str,
+    category: str,
+    raw_keywords: List[str] = None,
+    price: str = "29.99",
+    email: str = "commander@vektorflow.com"
+) -> Dict[str, Any]:
+    """
+    Main entry point for SEO optimization.
+    Called by main.py endpoint.
+    
+    Args:
+        product_title: Product title
+        supplier_description: Product description
+        category: Product category
+        raw_keywords: List of target keywords
+        price: Product price
+        email: User email
+    
+    Returns:
+        Dict with SEO metadata and scores
+    """
+    # Get user preferences and keys
+    preferences = get_user_preferences(email) or {}
+    user_keys = get_user_keys(email)  # This function needs to exist in database.py
+    
+    # Extract keywords if not provided
+    if not raw_keywords:
+        raw_keywords = extract_keywords(f"{product_title} {supplier_description}")
+    
+    # Generate SEO metadata
+    seo_data = await generate_seo_metadata(
+        product_title=product_title,
+        description=supplier_description,
+        category=category,
+        keywords=raw_keywords,
+        user_keys=user_keys,
+        preferences=preferences
+    )
+    
+    # Score the SEO metadata
+    scoring = score_seo_metadata(seo_data)
+    
+    # Save to memory
+    memory_key = f"seo_{product_title[:30].lower().replace(' ', '_')}"
+    save_memory(email, memory_key, json.dumps(seo_data))
+    
+    # Add to task history
+    task_id = add_task_history(email, "seo_optimizer", f"SEO optimization for {product_title}", "completed")
+    update_task_result(task_id, json.dumps(seo_data), status="completed")
+    
+    return {
+        "keywords": raw_keywords,
+        "seo_title": seo_data.get("seo_title"),
+        "meta_description": seo_data.get("meta_description"),
+        "url_slug": seo_data.get("url_slug"),
+        "schema_markup": seo_data.get("schema_markup"),
+        "secondary_keywords": seo_data.get("secondary_keywords", []),
+        "score": scoring.get("total_score"),
+        "suggestions": scoring.get("suggestions", []),
+        "memory_key": memory_key,
+        "task_id": task_id
+    }
+
+# ============ HELPER: GET USER KEYS ============
+
+def get_user_keys(email: str) -> Dict[str, str]:
+    """
+    Get user's API keys from database.
+    This is a wrapper to avoid circular imports.
+    """
+    from database import get_llm_keys
+    return get_llm_keys(email)
+
+# ============ INITIALIZATION ============
+
+print("✅ SEO Optimizer module loaded successfully")
+print("   Features: keyword extraction, AI metadata, bulk optimization, scoring")
