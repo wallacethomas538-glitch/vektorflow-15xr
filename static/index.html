@@ -1,0 +1,1217 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>VektorFlow 15xr - Commander Dashboard</title>
+
+    <style>
+        /* ---------- RESET ---------- */
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #0a0a0f;
+            color: #e4e4e7;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* ---------- HEADER ---------- */
+        .header {
+            background: rgba(16, 16, 24, 0.8);
+            backdrop-filter: blur(12px);
+            border-bottom: 1px solid #27272a;
+            padding: 1rem 2rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+            flex-wrap: wrap;
+            gap: 0.5rem;
+        }
+
+        .logo {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            font-size: 1.25rem;
+            font-weight: 700;
+            color: #fff;
+        }
+
+        .logo-icon {
+            width: 32px;
+            height: 32px;
+            background: linear-gradient(135deg, #8b5cf6, #6d28d9);
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 18px;
+        }
+
+        .header-actions {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            flex-wrap: wrap;
+        }
+
+        .status-badge {
+            padding: 0.25rem 0.75rem;
+            border-radius: 9999px;
+            font-size: 0.75rem;
+            font-weight: 500;
+            background: #22c55e;
+            color: #fff;
+        }
+
+        .status-badge.offline {
+            background: #ef4444;
+        }
+
+        /* ---------- LAYOUT ---------- */
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 2rem;
+            flex: 1;
+            width: 100%;
+        }
+
+        /* ---------- CARDS ---------- */
+        .card {
+            background: #18181b;
+            border: 1px solid #27272a;
+            border-radius: 12px;
+            padding: 1.5rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .card-title {
+            font-size: 1.1rem;
+            font-weight: 600;
+            margin-bottom: 1rem;
+            color: #fff;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .card-title .badge {
+            font-size: 0.65rem;
+            background: #8b5cf6;
+            padding: 0.1rem 0.5rem;
+            border-radius: 9999px;
+            font-weight: 400;
+        }
+
+        /* ---------- GRID ---------- */
+        .grid-2 {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1.5rem;
+        }
+
+        .grid-3 {
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr;
+            gap: 1.5rem;
+        }
+
+        .grid-4 {
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr 1fr;
+            gap: 1.5rem;
+        }
+
+        /* ---------- FORM ELEMENTS ---------- */
+        input,
+        textarea,
+        select {
+            width: 100%;
+            padding: 0.625rem 0.875rem;
+            background: #27272a;
+            border: 1px solid #3f3f46;
+            border-radius: 8px;
+            color: #e4e4e7;
+            font-size: 0.875rem;
+            transition: border 0.15s;
+        }
+
+        input:focus,
+        textarea:focus,
+        select:focus {
+            outline: none;
+            border-color: #8b5cf6;
+        }
+
+        textarea {
+            min-height: 60px;
+            resize: vertical;
+            font-family: inherit;
+        }
+
+        button {
+            padding: 0.625rem 1.25rem;
+            background: #8b5cf6;
+            color: #fff;
+            border: none;
+            border-radius: 8px;
+            font-weight: 500;
+            font-size: 0.875rem;
+            cursor: pointer;
+            transition: background 0.15s, transform 0.1s;
+        }
+
+        button:hover {
+            background: #7c3aed;
+        }
+
+        button:active {
+            transform: scale(0.97);
+        }
+
+        button.secondary {
+            background: #27272a;
+            color: #e4e4e7;
+        }
+
+        button.secondary:hover {
+            background: #3f3f46;
+        }
+
+        button.danger {
+            background: #ef4444;
+        }
+
+        button.danger:hover {
+            background: #dc2626;
+        }
+
+        button.success {
+            background: #22c55e;
+        }
+
+        button.success:hover {
+            background: #16a34a;
+        }
+
+        button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        button.small {
+            padding: 0.25rem 0.75rem;
+            font-size: 0.75rem;
+        }
+
+        /* ---------- CHAT ---------- */
+        .chat-container {
+            display: flex;
+            flex-direction: column;
+            gap: 0.75rem;
+            max-height: 400px;
+            overflow-y: auto;
+            padding-right: 0.5rem;
+        }
+
+        .chat-container::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        .chat-container::-webkit-scrollbar-track {
+            background: #18181b;
+        }
+
+        .chat-container::-webkit-scrollbar-thumb {
+            background: #3f3f46;
+            border-radius: 9999px;
+        }
+
+        .message {
+            padding: 0.75rem 1rem;
+            border-radius: 8px;
+            max-width: 85%;
+            word-wrap: break-word;
+            font-size: 0.875rem;
+            line-height: 1.5;
+        }
+
+        .message.user {
+            background: #8b5cf6;
+            align-self: flex-end;
+            color: #fff;
+        }
+
+        .message.assistant {
+            background: #27272a;
+            align-self: flex-start;
+            color: #e4e4e7;
+        }
+
+        .message.error {
+            background: #7f1d1d;
+            align-self: center;
+            color: #fca5a5;
+            max-width: 100%;
+        }
+
+        .message .timestamp {
+            font-size: 0.6rem;
+            opacity: 0.5;
+            margin-top: 0.25rem;
+            display: block;
+        }
+
+        .chat-input-row {
+            display: flex;
+            gap: 0.75rem;
+            margin-top: 0.75rem;
+        }
+
+        .chat-input-row input {
+            flex: 1;
+        }
+
+        /* ---------- TASKS ---------- */
+        .task-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0.625rem 0;
+            border-bottom: 1px solid #27272a;
+        }
+
+        .task-item:last-child {
+            border-bottom: none;
+        }
+
+        .task-status {
+            font-size: 0.7rem;
+            padding: 0.1rem 0.625rem;
+            border-radius: 9999px;
+            font-weight: 500;
+            text-transform: capitalize;
+        }
+
+        .task-status.pending {
+            background: #f59e0b;
+            color: #000;
+        }
+
+        .task-status.in_progress {
+            background: #3b82f6;
+            color: #fff;
+        }
+
+        .task-status.completed {
+            background: #22c55e;
+            color: #000;
+        }
+
+        /* ---------- ALERTS ---------- */
+        .alert-item {
+            padding: 0.5rem 0.75rem;
+            border-radius: 6px;
+            margin-bottom: 0.5rem;
+            font-size: 0.8rem;
+            border-left: 3px solid;
+        }
+
+        .alert-item.critical {
+            background: #7f1d1d;
+            border-color: #ef4444;
+        }
+
+        .alert-item.warning {
+            background: #78350f;
+            border-color: #f59e0b;
+        }
+
+        .alert-item.info {
+            background: #172554;
+            border-color: #3b82f6;
+        }
+
+        /* ---------- CONTENT BLOCK ---------- */
+        .content-block {
+            background: #27272a;
+            padding: 0.75rem;
+            border-radius: 6px;
+            margin-bottom: 0.5rem;
+            font-size: 0.8rem;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+        }
+
+        .content-block .label {
+            color: #8b5cf6;
+            font-weight: 600;
+            font-size: 0.7rem;
+            text-transform: uppercase;
+            display: block;
+            margin-bottom: 0.25rem;
+        }
+
+        /* ---------- RESPONSIVE ---------- */
+        @media (max-width: 1024px) {
+            .grid-4 {
+                grid-template-columns: 1fr 1fr;
+            }
+        }
+
+        @media (max-width: 768px) {
+            .grid-2,
+            .grid-3,
+            .grid-4 {
+                grid-template-columns: 1fr;
+            }
+
+            .header {
+                padding: 0.75rem 1rem;
+            }
+
+            .container {
+                padding: 1rem;
+            }
+        }
+
+        /* ---------- TABS ---------- */
+        .tabs {
+            display: flex;
+            gap: 0.5rem;
+            flex-wrap: wrap;
+            margin-bottom: 1rem;
+        }
+
+        .tabs button {
+            background: #27272a;
+            color: #a1a1aa;
+            padding: 0.4rem 1rem;
+            font-size: 0.8rem;
+        }
+
+        .tabs button.active {
+            background: #8b5cf6;
+            color: #fff;
+        }
+
+        .tab-content {
+            display: none;
+        }
+
+        .tab-content.active {
+            display: block;
+        }
+
+        /* ---------- MISC ---------- */
+        .flex-row {
+            display: flex;
+            gap: 0.75rem;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+
+        .mt-1 {
+            margin-top: 0.75rem;
+        }
+
+        .text-muted {
+            color: #a1a1aa;
+            font-size: 0.8rem;
+        }
+
+        .text-success {
+            color: #22c55e;
+        }
+
+        .text-danger {
+            color: #ef4444;
+        }
+
+        .text-warning {
+            color: #f59e0b;
+        }
+
+        .code-block {
+            background: #0a0a0f;
+            padding: 0.75rem;
+            border-radius: 6px;
+            font-family: monospace;
+            font-size: 0.75rem;
+            white-space: pre-wrap;
+            word-break: break-all;
+            max-height: 200px;
+            overflow-y: auto;
+        }
+
+        .result-box {
+            background: #27272a;
+            padding: 0.75rem;
+            border-radius: 6px;
+            min-height: 40px;
+            font-size: 0.85rem;
+            color: #e4e4e7;
+            margin-top: 0.5rem;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+
+        .result-box.error {
+            color: #fca5a5;
+            border: 1px solid #7f1d1d;
+        }
+
+        .loading {
+            opacity: 0.6;
+            pointer-events: none;
+        }
+
+        .loading::after {
+            content: " ...";
+            animation: dots 1.5s steps(4, end) infinite;
+        }
+
+        @keyframes dots {
+            0% {
+                content: " ...";
+            }
+            33% {
+                content: " ....";
+            }
+            66% {
+                content: " .....";
+            }
+            100% {
+                content: " ...";
+            }
+        }
+    </style>
+</head>
+<body>
+
+    <!-- ===== HEADER ===== -->
+    <header class="header">
+        <div class="logo">
+            <span class="logo-icon">⚡</span>
+            VektorFlow <span style="color:#8b5cf6;">15xr</span>
+        </div>
+        <div class="header-actions">
+            <span class="status-badge" id="statusBadge">● Online</span>
+            <button id="logoutBtn" class="danger small">Logout</button>
+        </div>
+    </header>
+
+    <!-- ===== MAIN CONTENT ===== -->
+    <div class="container">
+
+        <!-- ===== LOGIN SCREEN ===== -->
+        <div id="loginScreen">
+            <div class="card" style="max-width:400px;margin:4rem auto;">
+                <h2 style="margin-bottom:0.5rem;">🔐 Commander Login</h2>
+                <p style="color:#a1a1aa;margin-bottom:1.5rem;font-size:0.875rem;">Enter your credentials to access the VektorFlow cockpit.</p>
+                <form id="loginForm">
+                    <div style="margin-bottom:1rem;">
+                        <label style="display:block;font-size:0.75rem;font-weight:500;color:#a1a1aa;margin-bottom:0.25rem;">Email</label>
+                        <input type="email" id="loginEmail" value="commander@vektorflow.com" required />
+                    </div>
+                    <div style="margin-bottom:1.5rem;">
+                        <label style="display:block;font-size:0.75rem;font-weight:500;color:#a1a1aa;margin-bottom:0.25rem;">Password</label>
+                        <input type="password" id="loginPassword" value="vektorflow2026" required />
+                    </div>
+                    <button type="submit" style="width:100%;">Login</button>
+                    <div id="loginError" style="color:#ef4444;font-size:0.875rem;margin-top:0.75rem;display:none;"></div>
+                </form>
+            </div>
+        </div>
+
+        <!-- ===== DASHBOARD ===== -->
+        <div id="dashboard" style="display:none;">
+
+            <!-- ===== STATS ROW ===== -->
+            <div class="grid-4" id="statsRow">
+                <div class="card" style="text-align:center;">
+                    <div style="font-size:2rem;font-weight:700;color:#8b5cf6;" id="statTasks">0</div>
+                    <div class="text-muted">Tasks</div>
+                </div>
+                <div class="card" style="text-align:center;">
+                    <div style="font-size:2rem;font-weight:700;color:#22c55e;" id="statAlerts">0</div>
+                    <div class="text-muted">Alerts</div>
+                </div>
+                <div class="card" style="text-align:center;">
+                    <div style="font-size:2rem;font-weight:700;color:#f59e0b;" id="statStores">0</div>
+                    <div class="text-muted">Stores</div>
+                </div>
+                <div class="card" style="text-align:center;">
+                    <div style="font-size:2rem;font-weight:700;color:#3b82f6;" id="statCampaigns">0</div>
+                    <div class="text-muted">Campaigns</div>
+                </div>
+            </div>
+
+            <!-- ===== TABS ===== -->
+            <div class="tabs">
+                <button class="active" data-tab="tabChat">💬 Chat</button>
+                <button data-tab="tabSEO">🔍 SEO</button>
+                <button data-tab="tabInventory">📦 Inventory</button>
+                <button data-tab="tabOutreach">📧 Outreach</button>
+                <button data-tab="tabCampaign">📣 Campaign</button>
+                <button data-tab="tabContent">📝 Content</button>
+                <button data-tab="tabStore">🏪 Store</button>
+            </div>
+
+            <!-- ===== TAB: CHAT ===== -->
+            <div class="tab-content active" id="tabChat">
+                <div class="card">
+                    <div class="card-title">💬 Vektor Chat</div>
+                    <div class="chat-container" id="chatContainer">
+                        <div class="message assistant">⚡ Ready, Commander. How can I assist you today?</div>
+                    </div>
+                    <div class="chat-input-row">
+                        <input type="text" id="chatInput" placeholder="Type your message..." />
+                        <button id="sendChatBtn">Send</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ===== TAB: SEO ===== -->
+            <div class="tab-content" id="tabSEO">
+                <div class="card">
+                    <div class="card-title">🔍 SEO Optimizer</div>
+                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;">
+                        <div>
+                            <label style="font-size:0.75rem;color:#a1a1aa;">Product Title</label>
+                            <input type="text" id="seoTitle" placeholder="e.g. LED Desk Lamp" />
+                        </div>
+                        <div>
+                            <label style="font-size:0.75rem;color:#a1a1aa;">Category</label>
+                            <input type="text" id="seoCategory" placeholder="e.g. Electronics" />
+                        </div>
+                    </div>
+                    <div style="margin-top:0.75rem;">
+                        <label style="font-size:0.75rem;color:#a1a1aa;">Description</label>
+                        <textarea id="seoDescription" placeholder="Product description..."></textarea>
+                    </div>
+                    <button id="seoBtn" style="margin-top:0.75rem;">Generate SEO</button>
+                    <div id="seoResult" class="result-box" style="margin-top:0.75rem;">Results will appear here.</div>
+                </div>
+            </div>
+
+            <!-- ===== TAB: INVENTORY ===== -->
+            <div class="tab-content" id="tabInventory">
+                <div class="card">
+                    <div class="card-title">📦 Inventory Monitor</div>
+                    <div class="flex-row">
+                        <button id="invCheckBtn">Check Inventory</button>
+                        <button id="invAlertsBtn">Get Alerts</button>
+                        <button id="invReorderBtn">Reorder Recommendations</button>
+                    </div>
+                    <div id="invResult" class="result-box" style="margin-top:0.75rem;">Results will appear here.</div>
+                </div>
+            </div>
+
+            <!-- ===== TAB: OUTREACH ===== -->
+            <div class="tab-content" id="tabOutreach">
+                <div class="card">
+                    <div class="card-title">📧 Outreach Generator</div>
+                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;">
+                        <div>
+                            <label style="font-size:0.75rem;color:#a1a1aa;">Product Type</label>
+                            <input type="text" id="outreachProduct" placeholder="e.g. LED lamps" />
+                        </div>
+                        <div>
+                            <label style="font-size:0.75rem;color:#a1a1aa;">Platform</label>
+                            <select id="outreachPlatform">
+                                <option value="email">Email</option>
+                                <option value="linkedin">LinkedIn</option>
+                            </select>
+                        </div>
+                    </div>
+                    <button id="outreachBtn" style="margin-top:0.75rem;">Generate Outreach</button>
+                    <div id="outreachResult" class="result-box" style="margin-top:0.75rem;">Results will appear here.</div>
+                </div>
+            </div>
+
+            <!-- ===== TAB: CAMPAIGN ===== -->
+            <div class="tab-content" id="tabCampaign">
+                <div class="card">
+                    <div class="card-title">📣 Campaign Generator</div>
+                    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:1rem;">
+                        <div>
+                            <label style="font-size:0.75rem;color:#a1a1aa;">Product Type</label>
+                            <input type="text" id="campaignProduct" placeholder="e.g. LED lamps" />
+                        </div>
+                        <div>
+                            <label style="font-size:0.75rem;color:#a1a1aa;">Goal</label>
+                            <select id="campaignGoal">
+                                <option value="increase sales">Increase Sales</option>
+                                <option value="brand awareness">Brand Awareness</option>
+                                <option value="product launch">Product Launch</option>
+                                <option value="customer engagement">Customer Engagement</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label style="font-size:0.75rem;color:#a1a1aa;">Budget ($)</label>
+                            <input type="number" id="campaignBudget" value="1000" />
+                        </div>
+                    </div>
+                    <button id="campaignBtn" style="margin-top:0.75rem;">Generate Campaign</button>
+                    <div id="campaignResult" class="result-box" style="margin-top:0.75rem;">Results will appear here.</div>
+                </div>
+            </div>
+
+            <!-- ===== TAB: CONTENT ===== -->
+            <div class="tab-content" id="tabContent">
+                <div class="card">
+                    <div class="card-title">📝 Organic Content Generator</div>
+                    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:1rem;">
+                        <div>
+                            <label style="font-size:0.75rem;color:#a1a1aa;">Product Name</label>
+                            <input type="text" id="contentProduct" placeholder="e.g. LED Desk Lamp" />
+                        </div>
+                        <div>
+                            <label style="font-size:0.75rem;color:#a1a1aa;">Tone</label>
+                            <select id="contentTone">
+                                <option value="casual">Casual</option>
+                                <option value="professional">Professional</option>
+                                <option value="funny">Funny</option>
+                                <option value="inspiring">Inspiring</option>
+                                <option value="educational">Educational</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label style="font-size:0.75rem;color:#a1a1aa;">Platform</label>
+                            <select id="contentPlatform">
+                                <option value="instagram">Instagram</option>
+                                <option value="facebook">Facebook</option>
+                                <option value="tiktok">TikTok</option>
+                                <option value="linkedin">LinkedIn</option>
+                                <option value="twitter">Twitter</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div style="margin-top:0.75rem;">
+                        <label style="font-size:0.75rem;color:#a1a1aa;">Description (optional)</label>
+                        <textarea id="contentDescription" placeholder="Product description..."></textarea>
+                    </div>
+                    <button id="contentBtn" style="margin-top:0.75rem;">Generate Content</button>
+                    <div id="contentResult" class="result-box" style="margin-top:0.75rem;">Results will appear here.</div>
+                </div>
+            </div>
+
+            <!-- ===== TAB: STORE ===== -->
+            <div class="tab-content" id="tabStore">
+                <div class="card">
+                    <div class="card-title">🏪 Store Connector</div>
+                    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:1rem;">
+                        <div>
+                            <label style="font-size:0.75rem;color:#a1a1aa;">Platform</label>
+                            <select id="storePlatform">
+                                <option value="shopify">Shopify</option>
+                                <option value="woocommerce">WooCommerce</option>
+                                <option value="cj">CJ Dropshipping</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label style="font-size:0.75rem;color:#a1a1aa;">Store URL</label>
+                            <input type="text" id="storeUrl" placeholder="https://yourstore.com" />
+                        </div>
+                        <div>
+                            <label style="font-size:0.75rem;color:#a1a1aa;">Email</label>
+                            <input type="email" id="storeEmail" value="commander@vektorflow.com" />
+                        </div>
+                    </div>
+                    <button id="storeBtn" style="margin-top:0.75rem;">Connect Store</button>
+                    <div id="storeResult" class="result-box" style="margin-top:0.75rem;">Results will appear here.</div>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+    <!-- ===== JAVASCRIPT ===== -->
+    <script>
+        // =============================================
+        // CONFIG
+        // =============================================
+        const API_BASE = '';
+        let authToken = localStorage.getItem('vektor_token') || null;
+        let userEmail = localStorage.getItem('vektor_email') || null;
+
+        // =============================================
+        // DOM REFS
+        // =============================================
+        const loginScreen = document.getElementById('loginScreen');
+        const dashboard = document.getElementById('dashboard');
+        const loginForm = document.getElementById('loginForm');
+        const loginError = document.getElementById('loginError');
+        const logoutBtn = document.getElementById('logoutBtn');
+
+        // Chat
+        const chatContainer = document.getElementById('chatContainer');
+        const chatInput = document.getElementById('chatInput');
+        const sendChatBtn = document.getElementById('sendChatBtn');
+
+        // Stats
+        const statTasks = document.getElementById('statTasks');
+        const statAlerts = document.getElementById('statAlerts');
+        const statStores = document.getElementById('statStores');
+        const statCampaigns = document.getElementById('statCampaigns');
+
+        // =============================================
+        // HELPERS
+        // =============================================
+        function apiFetch(endpoint, options = {}) {
+            const headers = {
+                'Content-Type': 'application/json',
+                ...options.headers,
+            };
+            if (authToken) {
+                headers['Authorization'] = `Bearer ${authToken}`;
+            }
+            return fetch(`${API_BASE}${endpoint}`, {
+                ...options,
+                headers,
+            });
+        }
+
+        function getEmail() {
+            return userEmail || 'commander@vektorflow.com';
+        }
+
+        function setResult(element, data, isError = false) {
+            if (typeof data === 'object') {
+                element.textContent = JSON.stringify(data, null, 2);
+            } else {
+                element.textContent = data;
+            }
+            element.className = 'result-box' + (isError ? ' error' : '');
+        }
+
+        function addMessage(text, type = 'assistant') {
+            const div = document.createElement('div');
+            div.className = `message ${type}`;
+            div.textContent = text;
+            chatContainer.appendChild(div);
+            chatContainer.scrollTop = chatContainer.scrollHeight;
+        }
+
+        function showLoading(element) {
+            element.classList.add('loading');
+            element.disabled = true;
+        }
+
+        function hideLoading(element) {
+            element.classList.remove('loading');
+            element.disabled = false;
+        }
+
+        // =============================================
+        // LOGIN
+        // =============================================
+        loginForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const email = document.getElementById('loginEmail').value.trim();
+            const password = document.getElementById('loginPassword').value.trim();
+
+            loginError.style.display = 'none';
+
+            try {
+                const res = await apiFetch('/commander/login', {
+                    method: 'POST',
+                    body: JSON.stringify({ username: email, password }),
+                });
+                const data = await res.json();
+
+                if (!res.ok) {
+                    throw new Error(data.detail || 'Login failed');
+                }
+
+                authToken = data.token;
+                userEmail = data.user.username || email;
+                localStorage.setItem('vektor_token', authToken);
+                localStorage.setItem('vektor_email', userEmail);
+                showDashboard();
+                loadStats();
+            } catch (err) {
+                loginError.textContent = err.message || 'Invalid credentials. Try again.';
+                loginError.style.display = 'block';
+            }
+        });
+
+        logoutBtn.addEventListener('click', () => {
+            localStorage.removeItem('vektor_token');
+            localStorage.removeItem('vektor_email');
+            authToken = null;
+            userEmail = null;
+            showLogin();
+        });
+
+        // =============================================
+        // UI STATE
+        // =============================================
+        function showLogin() {
+            loginScreen.style.display = 'block';
+            dashboard.style.display = 'none';
+            document.getElementById('statusBadge').textContent = '● Offline';
+            document.getElementById('statusBadge').className = 'status-badge offline';
+        }
+
+        function showDashboard() {
+            loginScreen.style.display = 'none';
+            dashboard.style.display = 'block';
+            document.getElementById('statusBadge').textContent = '● Online';
+            document.getElementById('statusBadge').className = 'status-badge';
+            loadStats();
+        }
+
+        // =============================================
+        // TABS
+        // =============================================
+        document.querySelectorAll('.tabs button').forEach(btn => {
+            btn.addEventListener('click', () => {
+                document.querySelectorAll('.tabs button').forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+                document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+                document.getElementById(btn.dataset.tab).classList.add('active');
+            });
+        });
+
+        // =============================================
+        // STATS
+        // =============================================
+        async function loadStats() {
+            try {
+                // Tasks
+                const tasksRes = await apiFetch('/api/tasks');
+                const tasksData = await tasksRes.json();
+                statTasks.textContent = tasksData.tasks?.length || 0;
+
+                // Alerts
+                const alertsRes = await apiFetch(`/api/inventory/alerts?email=${getEmail()}`);
+                const alertsData = await alertsRes.json();
+                statAlerts.textContent = alertsData.total_alerts || 0;
+
+                // Stores
+                const storesRes = await apiFetch(`/api/tasks`); // placeholder
+                // We'll get stores from the /api/tasks endpoint later
+                statStores.textContent = '1'; // placeholder
+
+                // Campaigns
+                statCampaigns.textContent = '0'; // placeholder
+            } catch (e) {
+                console.error('Stats error:', e);
+            }
+        }
+
+        // =============================================
+        // CHAT
+        // =============================================
+        sendChatBtn.addEventListener('click', sendChat);
+        chatInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') sendChat();
+        });
+
+        async function sendChat() {
+            const msg = chatInput.value.trim();
+            if (!msg) return;
+
+            addMessage(msg, 'user');
+            chatInput.value = '';
+            sendChatBtn.disabled = true;
+
+            try {
+                const res = await apiFetch('/api/agent/chat', {
+                    method: 'POST',
+                    body: JSON.stringify({
+                        message: msg,
+                        email: getEmail(),
+                        context: [],
+                    }),
+                });
+                const data = await res.json();
+                if (!res.ok) throw new Error(data.detail || 'Chat error');
+                addMessage(data.response || 'No response.', 'assistant');
+            } catch (err) {
+                addMessage(`❌ ${err.message}`, 'error');
+            } finally {
+                sendChatBtn.disabled = false;
+            }
+        }
+
+        // =============================================
+        // SEO
+        // =============================================
+        document.getElementById('seoBtn').addEventListener('click', async () => {
+            const title = document.getElementById('seoTitle').value.trim();
+            const category = document.getElementById('seoCategory').value.trim();
+            const description = document.getElementById('seoDescription').value.trim();
+
+            if (!title) {
+                setResult(document.getElementById('seoResult'), 'Please enter a product title.', true);
+                return;
+            }
+
+            const btn = document.getElementById('seoBtn');
+            const result = document.getElementById('seoResult');
+            showLoading(btn);
+
+            try {
+                const res = await apiFetch('/optimize-seo', {
+                    method: 'POST',
+                    body: JSON.stringify({
+                        product_title: title,
+                        supplier_description: description,
+                        category: category || 'general',
+                        price: '29.99'
+                    }),
+                });
+                const data = await res.json();
+                if (!res.ok) throw new Error(data.detail || 'SEO generation failed');
+                setResult(result, JSON.stringify(data, null, 2));
+            } catch (err) {
+                setResult(result, `❌ ${err.message}`, true);
+            } finally {
+                hideLoading(btn);
+            }
+        });
+
+        // =============================================
+        // INVENTORY
+        // =============================================
+        document.getElementById('invCheckBtn').addEventListener('click', async () => {
+            const result = document.getElementById('invResult');
+            const btn = document.getElementById('invCheckBtn');
+            showLoading(btn);
+
+            try {
+                const res = await apiFetch(`/api/inventory/check?email=${getEmail()}`);
+                const data = await res.json();
+                if (!res.ok) throw new Error(data.detail || 'Inventory check failed');
+                setResult(result, data);
+                statAlerts.textContent = data.alert_count || 0;
+            } catch (err) {
+                setResult(result, `❌ ${err.message}`, true);
+            } finally {
+                hideLoading(btn);
+            }
+        });
+
+        document.getElementById('invAlertsBtn').addEventListener('click', async () => {
+            const result = document.getElementById('invResult');
+            const btn = document.getElementById('invAlertsBtn');
+            showLoading(btn);
+
+            try {
+                const res = await apiFetch(`/api/inventory/alerts?email=${getEmail()}`);
+                const data = await res.json();
+                if (!res.ok) throw new Error(data.detail || 'Alerts fetch failed');
+                setResult(result, data);
+            } catch (err) {
+                setResult(result, `❌ ${err.message}`, true);
+            } finally {
+                hideLoading(btn);
+            }
+        });
+
+        document.getElementById('invReorderBtn').addEventListener('click', async () => {
+            const result = document.getElementById('invResult');
+            const btn = document.getElementById('invReorderBtn');
+            showLoading(btn);
+
+            try {
+                const res = await apiFetch(`/api/inventory/reorder?email=${getEmail()}`);
+                const data = await res.json();
+                if (!res.ok) throw new Error(data.detail || 'Reorder recommendations failed');
+                setResult(result, data);
+            } catch (err) {
+                setResult(result, `❌ ${err.message}`, true);
+            } finally {
+                hideLoading(btn);
+            }
+        });
+
+        // =============================================
+        // OUTREACH
+        // =============================================
+        document.getElementById('outreachBtn').addEventListener('click', async () => {
+            const product = document.getElementById('outreachProduct').value.trim();
+            const platform = document.getElementById('outreachPlatform').value;
+            const result = document.getElementById('outreachResult');
+            const btn = document.getElementById('outreachBtn');
+
+            if (!product) {
+                setResult(result, 'Please enter a product type.', true);
+                return;
+            }
+
+            showLoading(btn);
+
+            try {
+                const res = await apiFetch('/api/outreach/generate', {
+                    method: 'POST',
+                    body: JSON.stringify({
+                        product_type: product,
+                        platform: platform,
+                        email: getEmail()
+                    }),
+                });
+                const data = await res.json();
+                if (!res.ok) throw new Error(data.detail || 'Outreach generation failed');
+                setResult(result, data);
+            } catch (err) {
+                setResult(result, `❌ ${err.message}`, true);
+            } finally {
+                hideLoading(btn);
+            }
+        });
+
+        // =============================================
+        // CAMPAIGN
+        // =============================================
+        document.getElementById('campaignBtn').addEventListener('click', async () => {
+            const product = document.getElementById('campaignProduct').value.trim();
+            const goal = document.getElementById('campaignGoal').value;
+            const budget = parseInt(document.getElementById('campaignBudget').value) || 1000;
+            const result = document.getElementById('campaignResult');
+            const btn = document.getElementById('campaignBtn');
+
+            if (!product) {
+                setResult(result, 'Please enter a product type.', true);
+                return;
+            }
+
+            showLoading(btn);
+
+            try {
+                const res = await apiFetch('/api/campaign/generate', {
+                    method: 'POST',
+                    body: JSON.stringify({
+                        product_type: product,
+                        goal: goal,
+                        budget: budget,
+                        email: getEmail()
+                    }),
+                });
+                const data = await res.json();
+                if (!res.ok) throw new Error(data.detail || 'Campaign generation failed');
+                setResult(result, data);
+            } catch (err) {
+                setResult(result, `❌ ${err.message}`, true);
+            } finally {
+                hideLoading(btn);
+            }
+        });
+
+        // =============================================
+        // ORGANIC CONTENT
+        // =============================================
+        document.getElementById('contentBtn').addEventListener('click', async () => {
+            const product = document.getElementById('contentProduct').value.trim();
+            const tone = document.getElementById('contentTone').value;
+            const platform = document.getElementById('contentPlatform').value;
+            const description = document.getElementById('contentDescription').value.trim();
+            const result = document.getElementById('contentResult');
+            const btn = document.getElementById('contentBtn');
+
+            if (!product) {
+                setResult(result, 'Please enter a product name.', true);
+                return;
+            }
+
+            showLoading(btn);
+
+            try {
+                const res = await apiFetch('/api/content/organic', {
+                    method: 'POST',
+                    body: JSON.stringify({
+                        product_name: product,
+                        product_description: description,
+                        platforms: [platform],
+                        tone: tone,
+                        email: getEmail()
+                    }),
+                });
+                const data = await res.json();
+                if (!res.ok) throw new Error(data.detail || 'Content generation failed');
+                setResult(result, data);
+            } catch (err) {
+                setResult(result, `❌ ${err.message}`, true);
+            } finally {
+                hideLoading(btn);
+            }
+        });
+
+        // =============================================
+        // STORE CONNECT
+        // =============================================
+        document.getElementById('storeBtn').addEventListener('click', async () => {
+            const platform = document.getElementById('storePlatform').value;
+            const url = document.getElementById('storeUrl').value.trim();
+            const email = document.getElementById('storeEmail').value.trim();
+            const result = document.getElementById('storeResult');
+            const btn = document.getElementById('storeBtn');
+
+            if (!url) {
+                setResult(result, 'Please enter a store URL.', true);
+                return;
+            }
+
+            showLoading(btn);
+
+            try {
+                const res = await apiFetch('/api/store/connect', {
+                    method: 'POST',
+                    body: JSON.stringify({
+                        platform: platform,
+                        store_url: url,
+                        email: email
+                    }),
+                });
+                const data = await res.json();
+                if (!res.ok) throw new Error(data.detail || 'Store connection failed');
+                setResult(result, data);
+            } catch (err) {
+                setResult(result, `❌ ${err.message}`, true);
+            } finally {
+                hideLoading(btn);
+            }
+        });
+
+        // =============================================
+        // INIT
+        // =============================================
+        if (authToken && userEmail) {
+            apiFetch('/health')
+                .then(res => {
+                    if (res.ok) {
+                        showDashboard();
+                        loadStats();
+                    } else {
+                        showLogin();
+                    }
+                })
+                .catch(() => showLogin());
+        } else {
+            showLogin();
+        }
+
+        console.log('⚡ VektorFlow 15xr Dashboard loaded.');
+        console.log(`   API Base: ${API_BASE || '(relative)'}`);
+        console.log(`   Token: ${authToken ? '✅ Present' : '❌ Missing'}`);
+        console.log(`   Features: Chat, SEO, Inventory, Outreach, Campaign, Content, Store`);
+    </script>
+
+</body>
+</html>
