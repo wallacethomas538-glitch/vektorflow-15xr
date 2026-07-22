@@ -11,7 +11,7 @@ app = "vektorflow-ai"
 [[services]]
   internal_port = 8080
   protocol = "tcp"
-  
+
   [services.concurrency]
     hard_limit = 25
     soft_limit = 20
@@ -24,6 +24,11 @@ app = "vektorflow-ai"
     port = 443
     handlers = ["tls", "http"]
 
-  [[services.tcp_checks]]
+  [[services.http_checks]]
     interval = 10000
     timeout = 2000
+    grace_period = 5000
+
+[[statics]]
+  guest_path = "/static"
+  url_prefix = "/static"
