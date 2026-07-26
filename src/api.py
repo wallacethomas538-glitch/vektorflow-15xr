@@ -1,4 +1,4 @@
-"""FastAPI Application - VektorFlow AI System."""
+"""FastAPI Application - VektorFlow AI System (No Auth)."""
 
 import logging
 import os
@@ -45,10 +45,14 @@ app.add_middleware(
 app.mount("/", StaticFiles(directory="static", html=True), name="static")
 
 
+# ============================== HEALTH ==============================
+
 @app.get("/health")
 async def health():
     return {"status": "healthy", "version": "2.0.0", "app": "VektorFlow"}
 
+
+# ============================== IMAGE GENERATION ==============================
 
 @app.post("/api/images/generate")
 async def generate_image(prompt: str, width: int = 1024, height: int = 1024):
@@ -62,6 +66,27 @@ async def generate_image(prompt: str, width: int = 1024, height: int = 1024):
         raise HTTPException(status_code=500, detail=f"Image generation failed: {str(e)}")
 
 
+@app.post("/api/images/bulk")
+async def bulk_generate(prompt: str, variations: int = 4):
+    try:
+        analytics.increment_metric("api_calls")
+        analytics.increment_metric("bulk_images_generated", variations)
+        images = await pollinations.generate_bulk_images(prompt, variations)
+        return JSONResponse(
+            status_code=200,
+            content={
+                "prompt": prompt,
+                "variations": len(images),
+                "images": [f"data:image/png;base64,{img}" for img in images]
+            }
+        )
+    except Exception as e:
+        analytics.increment_metric("errors")
+        raise HTTPException(status_code=500, detail=f"Bulk generation failed: {str(e)}")
+
+
+# ============================== DEEPSEEK AI ==============================
+
 @app.post("/api/deepseek/generate")
 async def deepseek_generate(prompt: str, system_prompt: str = None):
     try:
@@ -72,6 +97,38 @@ async def deepseek_generate(prompt: str, system_prompt: str = None):
         analytics.increment_metric("errors")
         raise HTTPException(status_code=500, detail=f"DeepSeek generation failed: {str(e)}")
 
+
+@app.post("/api/deepseek/script")
+async def deepseek_script(request: dict):
+    try:
+        analytics.increment_metric("api_calls")
+        analytics.increment_metric("scripts_generated")
+        # Simple script generation
+        product = request.get("product", "Product")
+        return JSONResponse(
+            status_code=200,
+            content={
+                "hook": f"Stop scrolling! You NEED this {product}!",
+                "problem": "Tired of products that don't deliver?",
+                "solution": f"{product} solves it all!",
+                "cta": "Link in bio! 🚀",
+                "full_script": f"Hey TikTok! Let me show you {product}... It's amazing!",
+            }
+        )
+    except Exception as e:
+        analytics.increment_metric("errors")
+        raise HTTPException(status_code=500, detail=f"Script generation failed: {str(e)}")
+
+
+# ============================== ANALYTICS ==============================
+
+@app.get("/api/analytics/metrics")
+async def get_metrics():
+    analytics.increment_metric("api_calls")
+    return JSONResponse(status_code=200, content=analytics.get_metrics())
+
+
+# ============================== ERROR HANDLING ==============================
 
 @app.exception_handler(Exception)
 async def global_handler(request: Request, exc: Exception):
