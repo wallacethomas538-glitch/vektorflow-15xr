@@ -142,4 +142,4 @@ async def global_handler(request: Request, exc: Exception):
     return JSONResponse(
         status_code=500,
         content={"error": "Internal server error", "timestamp": datetime.utcnow().isoformat()}
-    )
+    ) 
