@@ -7,7 +7,7 @@ from typing import Optional, Dict, Any, List
 from datetime import datetime
 import uuid
 
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, HTTPException, Request, RedirectResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, Response, FileResponse
 from fastapi.staticfiles import StaticFiles
@@ -43,6 +43,13 @@ app.add_middleware(
 )
 
 app.mount("/", StaticFiles(directory="static", html=True), name="static")
+
+
+# ============================== REDIRECT LOGIN TO DASHBOARD ==============================
+
+@app.get("/auth/login")
+async def redirect_login():
+    return RedirectResponse(url="/")
 
 
 # ============================== HEALTH ==============================
@@ -103,7 +110,6 @@ async def deepseek_script(request: dict):
     try:
         analytics.increment_metric("api_calls")
         analytics.increment_metric("scripts_generated")
-        # Simple script generation
         product = request.get("product", "Product")
         return JSONResponse(
             status_code=200,
