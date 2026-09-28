@@ -16,7 +16,7 @@ from database import (
     save_memory, get_memory, get_all_memory,
     add_task_history, update_task_result, get_tasks
 )
-from llm_handler import call_llm
+from llm_handler import call_llm, DEFAULT_MODEL
 from store_manager import search_cj_products, get_cj_product_details
 from trend_engine import get_tiktok_trends
 import re
@@ -158,7 +158,7 @@ class PriceAgent(BaseAgent):
         2. Suggested markup (%)
         3. Bundle recommendations
         """
-        result = await call_llm(prompt, "llama-3.3-70b-versatile", context.llm_keys)
+        result = await call_llm(prompt, DEFAULT_MODEL, context.llm_keys)
         return {
             "type": "pricing",
             "recommendation": result.get("response", "Unable to generate pricing.")
@@ -218,7 +218,7 @@ class AnalyzeAgent(BaseAgent):
         
         Provide actionable insights for improvement.
         """
-        result = await call_llm(prompt, "llama-3.3-70b-versatile", context.llm_keys)
+        result = await call_llm(prompt, DEFAULT_MODEL, context.llm_keys)
         return {
             "type": "analysis",
             "report": result.get("response", "Analysis not available.")
@@ -308,7 +308,7 @@ class Orchestrator:
         """
         
         try:
-            response = await call_llm(prompt, "llama-3.3-70b-versatile", context.llm_keys)
+            response = await call_llm(prompt, DEFAULT_MODEL, context.llm_keys)
             plan_text = response.get("response", "{}")
             # Extract JSON from response (in case extra text)
             json_match = re.search(r'\{.*\}', plan_text, re.DOTALL)
