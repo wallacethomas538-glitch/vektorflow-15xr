@@ -7,7 +7,7 @@ from typing import Dict, Any, Optional
 import json
 from datetime import datetime
 from database import get_user, get_user_stores, get_llm_keys, get_icp_data
-from llm_handler import call_llm
+from llm_handler import call_llm, DEFAULT_MODEL
 from store_manager import search_cj_products, get_cj_product_details
 from trend_engine import get_tiktok_trends
 
@@ -133,7 +133,7 @@ async def handle_outreach(message: str, user_keys: Dict, icp: Dict) -> Dict:
     target = icp.get("customer", "store owners") if icp else "store owners"
     
     prompt = f"Generate a 3-email + 2-LinkedIn outreach sequence for {product_type} targeting {target}. Keep it personal and value-focused."
-    result = await call_llm(prompt, "llama-3.3-70b-versatile", user_keys)
+    result = await call_llm(prompt, DEFAULT_MODEL, user_keys)
     
     return {
         "success": True,
@@ -157,7 +157,7 @@ async def handle_inventory(email: str) -> Dict:
 async def handle_campaign(message: str, user_keys: Dict) -> Dict:
     """Generate a campaign idea"""
     prompt = f"Generate a complete marketing campaign for: {message}. Include target audience, channels, timeline, and key messages."
-    result = await call_llm(prompt, "llama-3.3-70b-versatile", user_keys)
+    result = await call_llm(prompt, DEFAULT_MODEL, user_keys)
     
     return {
         "success": True,
@@ -202,7 +202,7 @@ async def handle_general_chat(
     Respond as Vektor. Be concise, helpful, and actionable.
     """
     
-    result = await call_llm(prompt, "llama-3.3-70b-versatile", user_keys)
+    result = await call_llm(prompt, DEFAULT_MODEL, user_keys)
     
     return {
         "success": True,
