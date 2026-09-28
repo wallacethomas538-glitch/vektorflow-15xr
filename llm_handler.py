@@ -3,10 +3,22 @@ Universal LLM Handler - Supports all providers
 """
 
 import os
+import asyncio
 import httpx
 from typing import Dict, Optional, Any
 
 DEFAULT_MODEL = os.getenv("VEKTORFLOW_MODEL", "ollama/llama3.2")
+
+# Comma-separated Ollama endpoints. The first endpoint is used first, then
+# subsequent endpoints are tried automatically when a request fails.
+DEFAULT_OLLAMA_ENDPOINT = "https://ollama-levx-vovn.onrender.com/api/generate"
+OLLAMA_ENDPOINTS = [
+    endpoint.strip().rstrip("/")
+    for endpoint in os.getenv("OLLAMA_ENDPOINTS", DEFAULT_OLLAMA_ENDPOINT).split(",")
+    if endpoint.strip()
+]
+_ollama_index = 0
+_ollama_index_lock = asyncio.Lock()
 
 PROVIDER_CONFIG = {
     "groq": {
@@ -105,19 +117,45 @@ async def call_llm(prompt: str, model: str, user_keys: Dict) -> Dict:
         return {"success": False, "error": f"Provider {provider} not configured"}
 
 async def call_ollama(prompt: str, model: str) -> Dict:
-    try:
-        model_name = model.replace("ollama/", "")
-        async with httpx.AsyncClient(timeout=120.0) as client:
-            response = await client.post(
-                "https://ollama-levx-vovn.onrender.com/api/generate",
-                json={"model": model_name, "prompt": prompt, "stream": False}
-            )
-            if response.status_code == 200:
-                data = response.json()
-                return {"success": True, "response": data.get("response", "")}
-            return {"success": False, "error": f"Ollama API error: {response.status_code}"}
-    except Exception as e:
-        return {"success": False, "error": f"Ollama request failed: {str(e)}"}
+    """Call Ollama with round-robin endpoint selection and automatic failover."""
+    global _ollama_index
+
+    if not OLLAMA_ENDPOINTS:
+        return {"success": False, "error": "No Ollama endpoints configured."}
+
+    model_name = model.replace("ollama/", "")
+    async with _ollama_index_lock:
+        start_index = _ollama_index % len(OLLAMA_ENDPOINTS)
+        _ollama_index = (start_index + 1) % len(OLLAMA_ENDPOINTS)
+
+    errors = []
+    async with httpx.AsyncClient(timeout=120.0) as client:
+        for offset in range(len(OLLAMA_ENDPOINTS)):
+            endpoint_index = (start_index + offset) % len(OLLAMA_ENDPOINTS)
+            endpoint = OLLAMA_ENDPOINTS[endpoint_index]
+            try:
+                response = await client.post(
+                    endpoint,
+                    json={"model": model_name, "prompt": prompt, "stream": False}
+                )
+                if response.status_code == 200:
+                    data = response.json()
+                    return {
+                        "success": True,
+                        "response": data.get("response", ""),
+                        "provider": "ollama",
+                        "endpoint": endpoint,
+                    }
+
+                errors.append(f"{endpoint}: HTTP {response.status_code}")
+            except Exception as exc:
+                errors.append(f"{endpoint}: {exc}")
+
+    return {
+        "success": False,
+        "error": "All Ollama endpoints failed: " + " | ".join(errors),
+        "provider": "ollama",
+    }
 
 async def call_groq(prompt: str, api_key: str, model: str) -> Dict:
     try:
