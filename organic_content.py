@@ -9,7 +9,7 @@ import logging
 from typing import Dict, Any, List, Optional
 from datetime import datetime
 
-from llm_handler import call_llm
+from llm_handler import call_llm, DEFAULT_MODEL
 from database import (
     get_icp_data,
     save_memory,
@@ -185,7 +185,7 @@ class OrganicContentGenerator:
         """
         
         try:
-            result = await call_llm(prompt, "llama-3.3-70b-versatile", self.user_keys)
+            result = await call_llm(prompt, DEFAULT_MODEL, self.user_keys)
             response_text = result.get("response", "{}")
             
             import re
