@@ -11,7 +11,8 @@ DEFAULT_MODEL = os.getenv("VEKTORFLOW_MODEL", "ollama/llama3.2")
 
 # Comma-separated Ollama endpoints. The first endpoint is used first, then
 # subsequent endpoints are tried automatically when a request fails.
-DEFAULT_OLLAMA_ENDPOINT = "https://ollama-levx-vovn.onrender.com/api/generate"
+DEFAULT_OLLAMA_ENDPOINT = "https://ollama.com/api/generate"
+OLLAMA_API_KEY = os.getenv("OLLAMA_API_KEY", "")
 OLLAMA_ENDPOINTS = [
     endpoint.strip().rstrip("/")
     for endpoint in os.getenv("OLLAMA_ENDPOINTS", DEFAULT_OLLAMA_ENDPOINT).split(",")
@@ -54,7 +55,7 @@ PROVIDER_CONFIG = {
         "openai_compatible": False
     },
     "ollama": {
-        "url": "https://ollama-levx-vovn.onrender.com/api/generate",
+        "url": "https://ollama.com/api/generate",
         "openai_compatible": False
     }
 }
@@ -134,8 +135,12 @@ async def call_ollama(prompt: str, model: str) -> Dict:
             endpoint_index = (start_index + offset) % len(OLLAMA_ENDPOINTS)
             endpoint = OLLAMA_ENDPOINTS[endpoint_index]
             try:
+                headers = {"Content-Type": "application/json"}
+                if OLLAMA_API_KEY:
+                    headers["Authorization"] = f"Bearer {OLLAMA_API_KEY}"
                 response = await client.post(
                     endpoint,
+                    headers=headers,
                     json={"model": model_name, "prompt": prompt, "stream": False}
                 )
                 if response.status_code == 200:
