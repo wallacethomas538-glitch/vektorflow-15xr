@@ -6,6 +6,8 @@ import os
 import httpx
 from typing import Dict, Optional, Any
 
+DEFAULT_MODEL = os.getenv("VEKTORFLOW_MODEL", "ollama/llama3.2")
+
 PROVIDER_CONFIG = {
     "groq": {
         "url": "https://api.groq.com/openai/v1/chat/completions",
