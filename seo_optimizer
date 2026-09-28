@@ -13,7 +13,7 @@ from urllib.parse import quote
 from datetime import datetime
 
 # ============ IMPORTS ============
-from llm_handler import call_llm
+from llm_handler import call_llm, DEFAULT_MODEL
 from database import (
     save_memory,
     get_memory,
@@ -184,7 +184,7 @@ async def generate_seo_metadata(
     """
     
     try:
-        result = await call_llm(prompt, "llama-3.3-70b-versatile", user_keys)
+        result = await call_llm(prompt, DEFAULT_MODEL, user_keys)
         response_text = result.get("response", "{}")
         
         # Extract JSON from response
