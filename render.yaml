@@ -2,7 +2,6 @@ services:
   - type: web
     name: vektorflow-15xr
     runtime: python
-    repo: https://github.com/wallacethomas538-glitch/vektorflow-15xr
     plan: starter
     region: oregon
     buildCommand: pip install -r requirements.txt
@@ -26,7 +25,3 @@ services:
         sync: false
       - key: DATABASE_URL
         sync: false
-    databases:
-      - name: vektorflow-db
-        databaseName: vektorflow
-        user: vektorflow_user
