@@ -8,7 +8,7 @@ import logging
 from typing import Dict, Any, List, Optional
 from datetime import datetime, timedelta
 
-from llm_handler import call_llm
+from llm_handler import call_llm, DEFAULT_MODEL
 from database import (
     get_icp_data,
     save_memory,
@@ -83,7 +83,7 @@ async def generate_outreach_sequence(
     """
     
     try:
-        result = await call_llm(prompt, "llama-3.3-70b-versatile", user_keys)
+        result = await call_llm(prompt, DEFAULT_MODEL, user_keys)
         response_text = result.get("response", "{}")
         import re
         json_match = re.search(r'\{[\s\S]*\}', response_text)
