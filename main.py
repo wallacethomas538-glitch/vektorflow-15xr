@@ -12,7 +12,7 @@ from datetime import datetime
 # ============ IMPORT ALL FEATURES ============
 from database import get_user, get_user_stores, get_llm_keys, get_icp_data, save_conversation
 from vektor_agent import vektor_chat, detect_intent
-from llm_handler import call_llm
+from llm_handler import call_llm, DEFAULT_MODEL
 from store_manager import search_cj_products, get_cj_product_details, connect_store
 from trend_engine import get_tiktok_trends
 from agents import run_agent_task
@@ -145,7 +145,7 @@ async def commander_login(login_data: CommanderLogin):
             }
         else:
             VALID_USERNAME = "commander@vektorflow.com"
-            VALID_PASSWORD = "vektorflow2026"
+            VALID_PASSWORD = os.environ.get("VEKTORFLOW_ADMIN_PASSWORD", "")
             if login_data.username == VALID_USERNAME and login_data.password == VALID_PASSWORD:
                 token = create_token({"email": VALID_USERNAME, "role": "admin"})
                 return {
@@ -231,9 +231,8 @@ async def ai_chat(message: AIChatMessage):
         user_keys = get_llm_keys(message.email or "commander@vektorflow.com")
         result = await call_llm(
             prompt=message.message,
-            model="llama-3.3-70b-versatile",
-            api_keys=user_keys,
-            context=message.context
+            model=DEFAULT_MODEL,
+            user_keys=user_keys
         )
         return {
             "status": "success",
