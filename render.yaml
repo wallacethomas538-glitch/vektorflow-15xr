@@ -25,7 +25,7 @@ services:
         sync: false
       - key: DATABASE_URL
         sync: false
-      - key: POLLINATIONS_API_KEY
+      - key: POLLINATIONS_ADS_KEY
         sync: false
       - key: POLLINATIONS_API_URL
         value: https://gen.pollinations.ai
