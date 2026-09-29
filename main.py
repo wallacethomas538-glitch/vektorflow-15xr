@@ -196,6 +196,8 @@ async def agent_specific_chat(agent_name: str, request: AgentChatRequest):
             llm_keys=get_llm_keys(email) or {},icp=get_icp_data(email) or {},memory=get_all_memory(email) or {},
             params=request.params or {},conversation_history=request.conversation_history or [])
         result=await agent.run(context,request.message)
+        if isinstance(result, dict) and result.get("status") == "failed":
+            raise HTTPException(status_code=502, detail=result.get("error", "Agent execution failed"))
         return {"status":"success","agent":agent.summary(),"result":result,"timestamp":datetime.utcnow().isoformat()}
     except Exception as e:
         logger.error("Individual agent chat error: %s",e)
