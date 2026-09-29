@@ -7,7 +7,11 @@ import asyncio
 import httpx
 from typing import Dict, Optional, Any
 
-DEFAULT_MODEL = os.getenv("VEKTORFLOW_MODEL", "ollama/llama3.2")
+LLM_GATEWAY_URL = os.getenv("LLM_GATEWAY_URL", "").rstrip("/")
+LLM_GATEWAY_API_KEY = os.getenv("LLM_GATEWAY_API_KEY", "")
+LLM_GATEWAY_PROVIDER = os.getenv("LLM_GATEWAY_PROVIDER", "openrouter")
+LLM_GATEWAY_MODEL = os.getenv("LLM_GATEWAY_MODEL", "openrouter/free")
+DEFAULT_MODEL = os.getenv("VEKTORFLOW_MODEL", "gateway/" + LLM_GATEWAY_MODEL if LLM_GATEWAY_URL else "ollama/llama3.2")
 
 # Comma-separated Ollama endpoints. The first endpoint is used first, then
 # subsequent endpoints are tried automatically when a request fails.
@@ -83,6 +87,9 @@ MODEL_PROVIDER = {
 }
 
 async def call_llm(prompt: str, model: str, user_keys: Dict) -> Dict:
+    if model.startswith("gateway/"):
+        return await call_gateway(prompt, model[len("gateway/"):])
+
     provider = MODEL_PROVIDER.get(model)
     if not provider:
         return {"success": False, "error": f"Unknown model: {model}"}
@@ -116,6 +123,40 @@ async def call_llm(prompt: str, model: str, user_keys: Dict) -> Dict:
         return await call_cohere(prompt, api_key, model)
     else:
         return {"success": False, "error": f"Provider {provider} not configured"}
+
+async def call_gateway(prompt: str, model: str) -> Dict:
+    """Call the shared Free LLM Gateway using its OpenAI-compatible endpoint."""
+    if not LLM_GATEWAY_URL:
+        return {"success": False, "error": "LLM_GATEWAY_URL is not configured."}
+    if not LLM_GATEWAY_API_KEY:
+        return {"success": False, "error": "LLM_GATEWAY_API_KEY is not configured."}
+
+    requested_model = model or LLM_GATEWAY_MODEL
+    payload = {
+        "model": requested_model,
+        "provider": LLM_GATEWAY_PROVIDER,
+        "messages": [{"role": "user", "content": prompt}],
+        "temperature": 0.7,
+        "max_tokens": 500,
+        "stream": False,
+    }
+    try:
+        async with httpx.AsyncClient(timeout=120.0) as client:
+            response = await client.post(
+                f"{LLM_GATEWAY_URL}/v1/chat/completions",
+                headers={
+                    "Authorization": f"Bearer {LLM_GATEWAY_API_KEY}",
+                    "Content-Type": "application/json",
+                },
+                json=payload,
+            )
+            if response.status_code >= 400:
+                return {"success": False, "error": f"LLM Gateway HTTP {response.status_code}: {response.text[:1000]}"}
+            data = response.json()
+            content = data.get("choices", [{}])[0].get("message", {}).get("content", "")
+            return {"success": True, "response": content, "provider": LLM_GATEWAY_PROVIDER, "model": requested_model}
+    except Exception as exc:
+        return {"success": False, "error": f"LLM Gateway request failed: {exc}"}
 
 async def call_ollama(prompt: str, model: str) -> Dict:
     """Call Ollama with round-robin endpoint selection and automatic failover."""
