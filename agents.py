@@ -3,7 +3,7 @@ VektorFlow 15XR — 15-agent autonomous e-commerce team.
 Each agent has a defined business duty and shares the same AgentContext so
 agents communicate through shared results and persistent memory.
 """
-import asyncio, json, logging, re
+import asyncio, json, logging, re, os
 from typing import Dict, Any, List, Optional
 from dataclasses import dataclass, field
 from enum import Enum
@@ -77,6 +77,65 @@ class ScoutAgent(BaseAgent):
 
 class RoleAgent(BaseAgent):
     async def _execute(self,context,instruction): return await self._llm_role(context,instruction)
+
+
+class AdImageAgent:
+    """Dedicated ad-image capability. Its Pollinations credential is never exposed to other agents."""
+    name = "AdSpecialist"
+    description = "Generates advertisement imagery through Pollinations."
+
+    def __init__(self):
+        self.api_key = os.getenv("POLLINATIONS_ADS_KEY", "")
+        self.api_url = os.getenv("POLLINATIONS_API_URL", "https://gen.pollinations.ai").rstrip("/")
+        self.referrer = os.getenv("POLLINATIONS_REFERRER", "vektorflow-ai")
+
+    async def generate_image(self, prompt: str, model: str = "flux", size: str = "1024x1024"):
+        if not self.api_key:
+            raise RuntimeError("POLLINATIONS_ADS_KEY is not configured")
+        prompt = prompt.strip()
+        if not prompt:
+            raise ValueError("Prompt required")
+        model = model.strip() or "flux"
+        size = size.strip() or "1024x1024"
+        width, height = (size.split("x", 1) if "x" in size else ("1024", "1024"))
+
+        import httpx
+        async with httpx.AsyncClient(timeout=120.0) as client:
+            response = await client.post(
+                f"{self.api_url}/v1/images/generations",
+                headers={
+                    "Authorization": f"Bearer {self.api_key}",
+                    "Content-Type": "application/json",
+                    "Referer": self.referrer,
+                },
+                json={
+                    "model": model,
+                    "prompt": prompt,
+                    "size": f"{width}x{height}",
+                    "n": 1,
+                    "response_format": "url",
+                },
+            )
+        if response.status_code >= 400:
+            logger.error("AdSpecialist Pollinations image API error: HTTP %s", response.status_code)
+            raise RuntimeError(
+                f"Pollinations image generation failed (upstream HTTP {response.status_code})"
+            )
+        result = response.json()
+        return {
+            "status": "success",
+            "provider": "pollinations",
+            "agent": self.name,
+            "model": model,
+            "data": result.get("data", []),
+        }
+
+
+_ad_specialist = AdImageAgent()
+
+
+def get_ad_specialist():
+    return _ad_specialist
 
 AGENT_ROLES=[
 ("Scout","Discovers products, niches, demand and trends."),
