@@ -90,147 +90,89 @@ class Order(BaseModel):
 # ============ CJ DROPSHIPPING API ============
 
 class CJAPI:
-    """CJ Dropshipping API wrapper."""
-    
-    BASE_URL = "https://api.cjdropshipping.com"
-    
-    def __init__(self, api_key: str = None, api_secret: str = None):
+    """CJ Dropshipping API 2.0 wrapper with token authentication."""
+    BASE_URL = "https://developers.cjdropshipping.com/api2.0/v1"
+
+    def __init__(self, api_key: str = None, api_secret: str = None, access_token: str = None):
         self.api_key = api_key or CJ_API_KEY
         self.api_secret = api_secret or CJ_API_SECRET
-        self.client = httpx.AsyncClient(timeout=30.0)
-    
-    def _sign_request(self, params: Dict) -> Dict:
-        """Sign request with API credentials."""
-        if not self.api_key or not self.api_secret:
-            return params
-        
-        # CJ uses HMAC-SHA256 for signing
-        timestamp = str(int(time.time()))
-        params["timestamp"] = timestamp
-        params["api_key"] = self.api_key
-        
-        # Sort params and create signature
-        sorted_params = sorted(params.items())
-        sign_str = "&".join([f"{k}={v}" for k, v in sorted_params if k != "sign"])
-        sign_str += f"&key={self.api_secret}"
-        params["sign"] = hashlib.md5(sign_str.encode()).hexdigest()
-        
-        return params
-    
+        self.access_token = access_token or os.environ.get("CJ_ACCESS_TOKEN", "")
+        self.refresh_token = os.environ.get("CJ_REFRESH_TOKEN", "")
+
+    async def _get_access_token(self) -> Optional[str]:
+        if self.access_token:
+            return self.access_token
+        if not self.api_key:
+            return None
+        try:
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                response = await client.post(
+                    f"{self.BASE_URL}/authentication/getAccessToken",
+                    json={"apiKey": self.api_key},
+                    headers={"Content-Type": "application/json"},
+                )
+            response.raise_for_status()
+            data = response.json()
+            token = (data.get("data") or {}).get("accessToken")
+            if token:
+                self.access_token = token
+                return token
+            logger.error("CJ authentication returned no access token: %s", data.get("message", "unknown error"))
+        except Exception as exc:
+            logger.error("CJ authentication failed: %s", exc)
+        return None
+
+    async def _get(self, path: str, params: Dict[str, Any]) -> Dict:
+        token = await self._get_access_token()
+        if not token:
+            return {"success": False, "error": "CJ API credentials are not configured.", "products": []}
+        try:
+            async with httpx.AsyncClient(timeout=60.0) as client:
+                response = await client.get(
+                    f"{self.BASE_URL}{path}",
+                    params=params,
+                    headers={"CJ-Access-Token": token},
+                )
+            response.raise_for_status()
+            return response.json()
+        except httpx.HTTPError as exc:
+            logger.error("CJ API request failed: %s", exc)
+            return {"success": False, "error": str(exc)}
+
     async def search_products(self, keyword: str, page: int = 1, limit: int = 20) -> Dict:
-        """Search for products on CJ."""
-        try:
-            params = {
-                "keyword": keyword,
-                "page": page,
-                "limit": limit
-            }
-            params = self._sign_request(params)
-            
-            response = await self.client.get(
-                f"{self.BASE_URL}/api/product/list",
-                params=params
-            )
-            response.raise_for_status()
-            data = response.json()
-            
-            if data.get("code") == 0:
-                products = data.get("data", {}).get("list", [])
-                return {
-                    "success": True,
-                    "products": products,
-                    "total": data.get("data", {}).get("total", 0)
-                }
-            else:
-                return {
-                    "success": False,
-                    "error": data.get("msg", "Unknown error"),
-                    "products": []
-                }
-        except httpx.HTTPError as e:
-            logger.error(f"CJ search error: {e}")
-            return {"success": False, "error": str(e), "products": []}
-    
+        """Search CJ's current product catalog using Product List V2."""
+        keyword = (keyword or "").strip()
+        if not keyword:
+            return {"success": False, "error": "Keyword required", "products": []}
+        limit = max(1, min(int(limit), 100))
+        data = await self._get("/product/listV2", {"page": max(1, int(page)), "size": limit, "keyWord": keyword})
+        if data.get("success") is False:
+            return {"success": False, "error": data.get("message") or data.get("error") or "CJ product search failed", "products": []}
+        payload = data.get("data") or {}
+        products = payload.get("content") or payload.get("list") or []
+        return {
+            "success": True,
+            "products": products,
+            "total": payload.get("totalRecords", payload.get("total", len(products))),
+        }
+
     async def get_product_details(self, product_id: str) -> Dict:
-        """Get detailed product information from CJ."""
-        try:
-            params = {"productId": product_id}
-            params = self._sign_request(params)
-            
-            response = await self.client.get(
-                f"{self.BASE_URL}/api/product/detail",
-                params=params
-            )
-            response.raise_for_status()
-            data = response.json()
-            
-            if data.get("code") == 0:
-                return {
-                    "success": True,
-                    "product": data.get("data", {})
-                }
-            else:
-                return {
-                    "success": False,
-                    "error": data.get("msg", "Unknown error")
-                }
-        except httpx.HTTPError as e:
-            logger.error(f"CJ product detail error: {e}")
-            return {"success": False, "error": str(e)}
-    
+        """Get full product details from CJ by product ID."""
+        product_id = (product_id or "").strip()
+        if not product_id:
+            return {"success": False, "error": "Product ID required"}
+        data = await self._get("/product/query", {"pid": product_id})
+        if data.get("success") is False:
+            return {"success": False, "error": data.get("message") or data.get("error") or "CJ product lookup failed"}
+        return {"success": True, "product": data.get("data") or {}}
+
     async def create_order(self, order_data: Dict) -> Dict:
-        """Create an order on CJ."""
-        try:
-            params = {"orderData": json.dumps(order_data)}
-            params = self._sign_request(params)
-            
-            response = await self.client.post(
-                f"{self.BASE_URL}/api/order/create",
-                data=params
-            )
-            response.raise_for_status()
-            data = response.json()
-            
-            if data.get("code") == 0:
-                return {
-                    "success": True,
-                    "order_id": data.get("data", {}).get("orderId")
-                }
-            else:
-                return {
-                    "success": False,
-                    "error": data.get("msg", "Unknown error")
-                }
-        except httpx.HTTPError as e:
-            logger.error(f"CJ order creation error: {e}")
-            return {"success": False, "error": str(e)}
-    
+        """CJ order creation is intentionally not mapped to the deprecated legacy endpoint."""
+        return {"success": False, "error": "CJ order creation requires the API 2.0 order workflow and has not been enabled here."}
+
     async def track_order(self, order_id: str) -> Dict:
-        """Track an order on CJ."""
-        try:
-            params = {"orderId": order_id}
-            params = self._sign_request(params)
-            
-            response = await self.client.get(
-                f"{self.BASE_URL}/api/order/tracking",
-                params=params
-            )
-            response.raise_for_status()
-            data = response.json()
-            
-            if data.get("code") == 0:
-                return {
-                    "success": True,
-                    "tracking": data.get("data", {})
-                }
-            else:
-                return {
-                    "success": False,
-                    "error": data.get("msg", "Unknown error")
-                }
-        except httpx.HTTPError as e:
-            logger.error(f"CJ tracking error: {e}")
-            return {"success": False, "error": str(e)}
+        """Order tracking requires a CJ API 2.0 order/tracking workflow."""
+        return {"success": False, "error": "CJ order tracking requires the API 2.0 order workflow and has not been enabled here."}
 
 # ============ SHOPIFY API ============
 
@@ -418,7 +360,7 @@ class StoreManager:
         """Load stores from database."""
         if not self.email:
             return
-        self.stores = get_user_stores(self.email)
+        self.stores = db_get_user_stores(self.email)
     
     def get_store(self, platform: str, store_url: str = None) -> Optional[Dict]:
         """Get a specific store connection."""
