@@ -140,10 +140,38 @@ async def agent_chat(message: AIChatMessage):
 @app.post("/api/agent/command")
 async def agent_command(command: AgentCommand):
     try:
-        result=await run_agent_task("commander@vektorflow.com","Vektor",command.command,command.params or {})
-        return {"status":"success","intent":detect_intent(command.command,{}),"result":result,"timestamp":datetime.utcnow().isoformat()}
+        intent = detect_intent(command.command, {})
+        if intent == "general":
+            result = await vektor_chat(
+                email="commander@vektorflow.com",
+                message=command.command,
+                conversation_history=None,
+            )
+            return {
+                "status": "success",
+                "intent": intent,
+                "response": result.get("response", "I'm here to help."),
+                "action": result.get("action", "chat"),
+                "data": result.get("data", {}),
+                "timestamp": datetime.utcnow().isoformat(),
+            }
+
+        result = await run_agent_task(
+            "commander@vektorflow.com",
+            "Vektor",
+            command.command,
+            command.params or {},
+        )
+        return {
+            "status": "success",
+            "intent": intent,
+            "response": result.get("message", result.get("response", "")) if isinstance(result, dict) else str(result),
+            "result": result,
+            "timestamp": datetime.utcnow().isoformat(),
+        }
     except Exception as e:
-        logger.error("Agent command error: %s",e); raise HTTPException(status_code=500,detail=str(e))
+        logger.error("Agent command error: %s", e)
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/api/agents")
 async def list_agents():
