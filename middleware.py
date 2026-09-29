@@ -21,7 +21,7 @@ class APIKeyMiddleware(BaseHTTPMiddleware):
     
     def __init__(self, app, admin_key: str = None):
         super().__init__(app)
-        self.admin_key = admin_key or os.environ.get("ADMIN_API_KEY", "vektorflow-admin-2026-secure-key")
+        self.admin_key = admin_key or os.environ.get("ADMIN_API_KEY", "")
     
     async def dispatch(self, request: Request, call_next):
         """
@@ -52,6 +52,10 @@ class APIKeyMiddleware(BaseHTTPMiddleware):
             auth_header = request.headers.get("Authorization")
             if auth_header and auth_header.startswith("Bearer "):
                 api_key = auth_header.replace("Bearer ", "")
+        
+        if not self.admin_key:
+            logger.error("ADMIN_API_KEY is not configured")
+            raise HTTPException(status_code=503, detail="Admin API key is not configured")
         
         if not api_key:
             logger.warning(f"Missing API key for {request.url.path}")
