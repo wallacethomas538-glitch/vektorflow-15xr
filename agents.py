@@ -4,7 +4,7 @@ Each agent has a defined business duty and shares the same AgentContext so
 agents communicate through shared results and persistent memory.
 """
 import asyncio, json, logging, re, os
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, List, Optional, Callable
 from dataclasses import dataclass, field
 from enum import Enum
 from database import get_user, get_user_stores, get_llm_keys, get_icp_data, save_memory, get_all_memory
@@ -30,9 +30,20 @@ class AgentContext:
     conversation_history: List[Dict]=field(default_factory=list)
 
 class BaseAgent:
-    def __init__(self,name:str,description:str,tools:Optional[List[Dict]]=None):
+    def __init__(self,name:str,description:str,tools:Optional[List[Dict]]=None,tool_handlers:Optional[Dict[str,Callable]]=None):
         self.name=name; self.description=description; self.tools=tools or []
+        self.tool_handlers=tool_handlers or {}
         self.status=AgentStatus.IDLE; self.result=None
+
+    async def use_tool(self,tool_name:str,context,**kwargs):
+        handler=self.tool_handlers.get(tool_name)
+        if handler is None:
+            raise ValueError(f"Tool '{tool_name}' is not available to {self.name}")
+        result=handler(context,**kwargs)
+        if hasattr(result,"__await__"):
+            result=await result
+        return result
+
     async def run(self,context,instruction):
         self.status=AgentStatus.RUNNING
         try:
@@ -85,6 +96,29 @@ class ScoutAgent(BaseAgent):
 
 class RoleAgent(BaseAgent):
     async def _execute(self,context,instruction): return await self._llm_role(context,instruction)
+
+
+def _read_team_results(context, agent_name=None):
+    """Read the structured results produced by earlier team members."""
+    results=context.results
+    if agent_name:
+        return {agent_name.lower(): results.get(agent_name.lower())}
+    return results.copy()
+
+
+class SmaugAgent(RoleAgent):
+    def __init__(self,name="Smaug",description="Owns profit strategy, unit economics, budgets and treasury decisions."):
+        super().__init__(name,description,
+            [{"name":"read_team_results","description":"Read structured findings produced by earlier agents."}],
+            {"read_team_results":_read_team_results})
+
+    async def _execute(self,context,instruction):
+        team_results=await self.use_tool("read_team_results",context)
+        context.params["smaug_input"]=team_results
+        result=await self._llm_role(context,instruction)
+        if isinstance(result,dict):
+            result["tool_calls"]=[{"tool":"read_team_results","status":"completed","agents_available":list(team_results.keys())}]
+        return result
 
 
 class AdImageAgent:
@@ -167,7 +201,13 @@ class Orchestrator:
     def __init__(self):
         self.agents={}
         for name,description in AGENT_ROLES:
-            self.register_agent(ScoutAgent() if name=="Scout" else RoleAgent(name,description))
+            if name=="Scout":
+                agent=ScoutAgent()
+            elif name=="Smaug":
+                agent=SmaugAgent(name,description)
+            else:
+                agent=RoleAgent(name,description)
+            self.register_agent(agent)
     def register_agent(self,agent): self.agents[agent.name.lower()]=agent
     def get_agent(self,name): return self.agents.get(name.lower())
     def roster(self): return [a.summary() for a in self.agents.values()]
