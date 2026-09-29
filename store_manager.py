@@ -97,7 +97,7 @@ class CJAPI:
     def __init__(self, api_key: str = None, api_secret: str = None):
         self.api_key = api_key or CJ_API_KEY
         self.api_secret = api_secret or CJ_API_SECRET
-        self.client = httpx.Client(timeout=30.0)
+        self.client = httpx.AsyncClient(timeout=30.0)
     
     def _sign_request(self, params: Dict) -> Dict:
         """Sign request with API credentials."""
@@ -242,7 +242,7 @@ class ShopifyAPI:
         self.api_key = api_key or SHOPIFY_API_KEY
         self.api_secret = api_secret or SHOPIFY_API_SECRET
         self.access_token = access_token
-        self.client = httpx.Client(timeout=30.0)
+        self.client = httpx.AsyncClient(timeout=30.0)
     
     def _headers(self) -> Dict:
         """Get request headers."""
@@ -342,7 +342,7 @@ class WooCommerceAPI:
         self.store_url = store_url.rstrip("/")
         self.api_key = api_key or WOOCOMMERCE_API_KEY
         self.api_secret = api_secret or WOOCOMMERCE_API_SECRET
-        self.client = httpx.Client(timeout=30.0)
+        self.client = httpx.AsyncClient(timeout=30.0)
     
     def _headers(self) -> Dict:
         """Get request headers."""
