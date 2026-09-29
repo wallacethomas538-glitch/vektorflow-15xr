@@ -13,6 +13,8 @@ class Settings(BaseSettings):
     deepseek_api_key: Optional[str] = None
     openai_api_key: Optional[str] = None
     zai_api_key: Optional[str] = None
+    pollinations_api_key: Optional[str] = None
+    pollinations_api_url: str = "https://gen.pollinations.ai"
     pollinations_referrer: str = "vektorflow-ai"
     gcp_project_id: Optional[str] = None
     gcp_dataset_id: str = "vektorflow_shop"
