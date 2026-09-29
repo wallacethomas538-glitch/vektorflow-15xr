@@ -107,7 +107,15 @@ class Orchestrator:
         results={}
         for name in order:
             agent=self.agents[name]
-            result=await agent.run(context,goal)
+            role_description=agent.description
+            instruction=(f"{goal}\n\nYour assigned duty is: {role_description}\n"
+                         f"Perform your part of this task now. Use the results already produced by earlier agents as evidence. "
+                         f"Return concrete findings, reasoning, actions, and handoff information relevant to your duty.")
+            if name == "oracle":
+                instruction=(f"{goal}\n\nYou are the final Oracle synthesizer. Review ALL evidence produced by the other agents in context.results. "
+                             f"Identify the strongest-supported opportunities, explain the evidence from each relevant agent, "
+                             f"surface missing evidence/uncertainty, and provide explicit next actions. Do not invent data.")
+            result=await agent.run(context,instruction)
             results[name]=result; context.results[name]=result
             save_memory(context.email,f"agent_{name}_result",json.dumps(result,default=str))
         return {"status":"completed","goal":goal,"agent_count":15,"results":results,"roster":self.roster()}
