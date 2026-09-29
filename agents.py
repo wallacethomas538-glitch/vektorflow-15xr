@@ -77,7 +77,10 @@ class ScoutAgent(BaseAgent):
             return {"agent":self.name,"type":"trends","data":(await get_tiktok_trends())[:10],"status":"completed"}
         if any(term in normalized for term in ("search", "product", "products", "catalog", "supplier", "niche", "discover")):
             keyword=instruction.replace("search","").replace("scout","").strip() or "best selling products"
-            return {"agent":self.name,"type":"products","keyword":keyword,"data":(await search_cj_products(keyword))[:10],"status":"completed"}
+            products = await search_cj_products(keyword)
+            if not products:
+                return {"agent":self.name,"type":"products","keyword":keyword,"data":[],"status":"failed","error":"CJ product search returned no results or is not configured."}
+            return {"agent":self.name,"type":"products","keyword":keyword,"data":products[:10],"status":"completed"}
         return await self._llm_role(context, instruction)
 
 class RoleAgent(BaseAgent):
