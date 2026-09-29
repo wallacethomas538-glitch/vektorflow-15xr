@@ -21,11 +21,15 @@ from inventory import check_inventory, get_inventory_alerts, get_reorder_recomme
 from campaign import generate_campaign
 from organic_content import generate_organic_content
 
+POLLINATIONS_API_KEY = os.environ.get("POLLINATIONS_API_KEY", "")
+POLLINATIONS_API_URL = os.environ.get("POLLINATIONS_API_URL", "https://gen.pollinations.ai").rstrip("/")
+POLLINATIONS_REFERRER = os.environ.get("POLLINATIONS_REFERRER", "vektorflow-ai")
+
 app = FastAPI(title="VektorFlow 15xr", version="1.1")
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("vektorflow")
-ADMIN_API_KEY = os.environ.get("ADMIN_API_KEY", "vektorflow-admin-2026-secure-key")
+ADMIN_API_KEY = os.environ.get("ADMIN_API_KEY", "")
 
 STATIC_DIR = os.path.join(os.path.dirname(__file__), "static")
 HTML_PATH = os.path.join(STATIC_DIR, "index.html")
@@ -254,6 +258,41 @@ async def api_info():
         "endpoints":{"login":"/commander/login","agent_chat":"/api/agent/chat","agent_command":"/api/agent/command","agents":"/api/agents","agent_detail":"/api/agents/{agent_name}","agent_chat":"/api/agents/{agent_name}/chat","team_run":"/api/agents/run","ai_chat":"/api/ai/chat","search_products":"/api/products/search","trends":"/api/trends","store_connect":"/api/store/connect","tasks":"/api/tasks","optimize_seo":"/optimize-seo","outreach":"/api/outreach/generate","inventory_check":"/api/inventory/check","inventory_alerts":"/api/inventory/alerts","inventory_reorder":"/api/inventory/reorder","campaign":"/api/campaign/generate","organic_content":"/api/content/organic"},
         "timestamp":datetime.utcnow().isoformat()
     }
+
+@app.post("/api/ads/generate-image")
+async def generate_ad_image(request: Request):
+    """Generate an advertisement image through Pollinations without exposing its API key."""
+    if not POLLINATIONS_API_KEY:
+        raise HTTPException(status_code=503, detail="Pollinations is not configured")
+    data = await request.json()
+    prompt = str(data.get("prompt", "")).strip()
+    if not prompt:
+        raise HTTPException(status_code=400, detail="Prompt required")
+    model = str(data.get("model", "flux"))
+    size = str(data.get("size", "1024x1024"))
+    width, height = (size.split("x", 1) if "x" in size else ("1024", "1024"))
+    try:
+        import httpx
+        async with httpx.AsyncClient(timeout=120.0) as client:
+            response = await client.post(
+                f"{POLLINATIONS_API_URL}/v1/images/generations",
+                headers={
+                    "Authorization": f"Bearer {POLLINATIONS_API_KEY}",
+                    "Content-Type": "application/json",
+                    "Referer": POLLINATIONS_REFERRER,
+                },
+                json={"model": model, "prompt": prompt, "size": f"{width}x{height}", "n": 1},
+            )
+        if response.status_code >= 400:
+            logger.error("Pollinations image API error: HTTP %s", response.status_code)
+            raise HTTPException(status_code=502, detail="Pollinations image generation failed")
+        result = response.json()
+        return {"status": "success", "provider": "pollinations", "model": model, "data": result.get("data", [])}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error("Pollinations image request failed: %s", e)
+        raise HTTPException(status_code=502, detail="Pollinations image generation failed")
 
 @app.get("/wakeup")
 async def wakeup(): return {"status":"awake","timestamp":datetime.utcnow().isoformat()}
