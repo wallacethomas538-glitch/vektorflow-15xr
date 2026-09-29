@@ -225,6 +225,8 @@ async def search_products(request: Request):
     data=await request.json(); keyword=data.get("keyword","")
     if not keyword: raise HTTPException(status_code=400,detail="Keyword required")
     products=await search_cj_products(keyword)
+    if not products:
+        raise HTTPException(status_code=502, detail="CJ product search returned no results or CJ credentials are not configured.")
     return {"status":"success","products":products[:10],"count":len(products),"timestamp":datetime.utcnow().isoformat()}
 
 @app.get("/api/trends")
