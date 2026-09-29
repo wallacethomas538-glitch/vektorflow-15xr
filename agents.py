@@ -53,7 +53,9 @@ User goal/instruction: {instruction}
 Shared work from other agents:
 {shared}
 Business context: {json.dumps(context.params,default=str)}
-Return concise JSON with keys: status, message, actions, handoff.
+Conversation with this agent:
+{json.dumps(context.conversation_history[-12:],default=str)}
+Return concise JSON with keys: status, message, actions, handoff, evidence. Evidence should contain concrete findings or reasoning when the task asks for analysis. Never return empty work when the assigned duty can be performed from the supplied context.
 Never claim an external action was completed unless the connected integration actually performed it."""
         result=await call_llm(prompt,DEFAULT_MODEL,context.llm_keys)
         text=result.get("response","")
