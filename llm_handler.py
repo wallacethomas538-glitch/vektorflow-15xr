@@ -13,6 +13,9 @@ DEFAULT_MODEL = os.getenv("VEKTORFLOW_MODEL", "ollama/llama3.2")
 # subsequent endpoints are tried automatically when a request fails.
 DEFAULT_OLLAMA_ENDPOINT = "https://ollama.com/api/generate"
 OLLAMA_API_KEY = os.getenv("OLLAMA_API_KEY", "")
+POLLINATIONS_API_KEY = os.getenv("POLLINATIONS_API_KEY", "")
+POLLINATIONS_API_URL = os.getenv("POLLINATIONS_API_URL", "https://gen.pollinations.ai").rstrip("/")
+POLLINATIONS_REFERRER = os.getenv("POLLINATIONS_REFERRER", "vektorflow-ai")
 OLLAMA_ENDPOINTS = [
     endpoint.strip().rstrip("/")
     for endpoint in os.getenv("OLLAMA_ENDPOINTS", DEFAULT_OLLAMA_ENDPOINT).split(",")
@@ -57,6 +60,10 @@ PROVIDER_CONFIG = {
     "ollama": {
         "url": "https://ollama.com/api/generate",
         "openai_compatible": False
+    },
+    "pollinations": {
+        "url": "https://gen.pollinations.ai/v1/chat/completions",
+        "openai_compatible": True
     }
 }
 
@@ -79,7 +86,9 @@ MODEL_PROVIDER = {
     "gpt-4o-mini": "openai",
     "meta-llama/Llama-3.2-1B-Instruct": "huggingface",
     "meta-llama/Meta-Llama-3-70B-Instruct": "huggingface",
-    "ollama/llama3.2": "ollama"
+    "ollama/llama3.2": "ollama",
+    "pollinations/openai": "pollinations",
+    "pollinations/gpt-5.6-luna": "pollinations"
 }
 
 async def call_llm(prompt: str, model: str, user_keys: Dict) -> Dict:
@@ -93,6 +102,12 @@ async def call_llm(prompt: str, model: str, user_keys: Dict) -> Dict:
     
     if provider == "ollama":
         return await call_ollama(prompt, model)
+
+    if provider == "pollinations":
+        api_key = user_keys.get("pollinations") or POLLINATIONS_API_KEY
+        if not api_key:
+            return {"success": False, "error": "No API key for pollinations. Configure POLLINATIONS_API_KEY or add a Pollinations key in Settings."}
+        return await call_pollinations(prompt, api_key, model)
     
     api_key = user_keys.get(provider)
     if not api_key:
@@ -116,6 +131,34 @@ async def call_llm(prompt: str, model: str, user_keys: Dict) -> Dict:
         return await call_cohere(prompt, api_key, model)
     else:
         return {"success": False, "error": f"Provider {provider} not configured"}
+
+async def call_pollinations(prompt: str, api_key: str, model: str) -> Dict:
+    """Call Pollinations through its OpenAI-compatible API."""
+    model_name = model.replace("pollinations/", "")
+    try:
+        async with httpx.AsyncClient(timeout=120.0) as client:
+            response = await client.post(
+                f"{POLLINATIONS_API_URL}/v1/chat/completions",
+                headers={
+                    "Authorization": f"Bearer {api_key}",
+                    "Content-Type": "application/json",
+                    "Referer": POLLINATIONS_REFERRER,
+                },
+                json={
+                    "model": model_name,
+                    "messages": [{"role": "user", "content": prompt}],
+                    "temperature": 0.7,
+                    "max_tokens": 1000,
+                },
+            )
+            if response.status_code == 200:
+                data = response.json()
+                content = data.get("choices", [{}])[0].get("message", {}).get("content", "")
+                return {"success": True, "response": content, "provider": "pollinations", "model": model_name}
+            return {"success": False, "error": f"Pollinations API error: {response.status_code}", "provider": "pollinations"}
+    except Exception as e:
+        return {"success": False, "error": f"Pollinations request failed: {str(e)}", "provider": "pollinations"}
+
 
 async def call_ollama(prompt: str, model: str) -> Dict:
     """Call Ollama with round-robin endpoint selection and automatic failover."""
