@@ -84,6 +84,11 @@ class TeamRunRequest(BaseModel):
     goal: str
     email: str = "commander@vektorflow.com"
     params: Optional[Dict[str, Any]] = {}
+class AgentChatRequest(BaseModel):
+    message: str
+    email: str = "commander@vektorflow.com"
+    conversation_history: Optional[List[Dict[str, Any]]] = []
+    params: Optional[Dict[str, Any]] = {}
 
 @app.get("/", response_class=HTMLResponse)
 async def root():
@@ -146,6 +151,22 @@ async def get_agent(agent_name: str):
     if not agent: raise HTTPException(status_code=404,detail="Agent not found")
     return {"status":"success","agent":agent.summary(),"timestamp":datetime.utcnow().isoformat()}
 
+@app.post("/api/agents/{agent_name}/chat")
+async def agent_specific_chat(agent_name: str, request: AgentChatRequest):
+    from agents import AgentContext
+    agent = get_orchestrator().get_agent(agent_name)
+    if not agent:
+        raise HTTPException(status_code=404, detail="Agent not found")
+    try:
+        email=request.email or "commander@vektorflow.com"
+        context=AgentContext(email=email,user=get_user(email) or {},stores=get_user_stores(email) or [],
+            llm_keys=get_llm_keys(email) or {},icp=get_icp_data(email) or {},memory=get_all_memory(email) or {},
+            params=request.params or {},conversation_history=request.conversation_history or [])
+        result=await agent.run(context,request.message)
+        return {"status":"success","agent":agent.summary(),"result":result,"timestamp":datetime.utcnow().isoformat()}
+    except Exception as e:
+        logger.error("Individual agent chat error: %s",e)
+        raise HTTPException(status_code=500,detail=str(e))
 @app.post("/api/agents/run")
 async def run_team(request: TeamRunRequest):
     from agents import AgentContext
@@ -230,7 +251,7 @@ async def api_info():
         "service":"VektorFlow 15xr","version":"1.1","status":"operational","agent_count":15,
         "agent_roster":[{"name":n,"description":d} for n,d in __import__("agents").AGENT_ROLES],
         "features":{"agent":"15-agent cooperative orchestrator","seo":"SEO optimization","store":"Store auto-connect","outreach":"Outreach generator","inventory":"Inventory monitoring","campaign":"Campaign generator","organic_content":"Organic content generator"},
-        "endpoints":{"login":"/commander/login","agent_chat":"/api/agent/chat","agent_command":"/api/agent/command","agents":"/api/agents","agent_detail":"/api/agents/{agent_name}","team_run":"/api/agents/run","ai_chat":"/api/ai/chat","search_products":"/api/products/search","trends":"/api/trends","store_connect":"/api/store/connect","tasks":"/api/tasks","optimize_seo":"/optimize-seo","outreach":"/api/outreach/generate","inventory_check":"/api/inventory/check","inventory_alerts":"/api/inventory/alerts","inventory_reorder":"/api/inventory/reorder","campaign":"/api/campaign/generate","organic_content":"/api/content/organic"},
+        "endpoints":{"login":"/commander/login","agent_chat":"/api/agent/chat","agent_command":"/api/agent/command","agents":"/api/agents","agent_detail":"/api/agents/{agent_name}","agent_chat":"/api/agents/{agent_name}/chat","team_run":"/api/agents/run","ai_chat":"/api/ai/chat","search_products":"/api/products/search","trends":"/api/trends","store_connect":"/api/store/connect","tasks":"/api/tasks","optimize_seo":"/optimize-seo","outreach":"/api/outreach/generate","inventory_check":"/api/inventory/check","inventory_alerts":"/api/inventory/alerts","inventory_reorder":"/api/inventory/reorder","campaign":"/api/campaign/generate","organic_content":"/api/content/organic"},
         "timestamp":datetime.utcnow().isoformat()
     }
 
