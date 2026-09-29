@@ -295,7 +295,10 @@ async def generate_ad_image(request_data: AdImageRequest):
             )
         if response.status_code >= 400:
             logger.error("Pollinations image API error: HTTP %s", response.status_code)
-            raise HTTPException(status_code=502, detail="Pollinations image generation failed")
+            raise HTTPException(
+                status_code=502,
+                detail=f"Pollinations image generation failed (upstream HTTP {response.status_code})",
+            )
         result = response.json()
         return {"status": "success", "provider": "pollinations", "model": model, "data": result.get("data", [])}
     except HTTPException:
