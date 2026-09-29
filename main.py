@@ -94,6 +94,11 @@ class AgentChatRequest(BaseModel):
     conversation_history: Optional[List[Dict[str, Any]]] = []
     params: Optional[Dict[str, Any]] = {}
 
+class AdImageRequest(BaseModel):
+    prompt: str
+    model: str = "flux"
+    size: str = "1024x1024"
+
 @app.get("/", response_class=HTMLResponse)
 async def root():
     if os.path.exists(HTML_PATH):
@@ -260,16 +265,15 @@ async def api_info():
     }
 
 @app.post("/api/ads/generate-image")
-async def generate_ad_image(request: Request):
+async def generate_ad_image(request_data: AdImageRequest):
     """Generate an advertisement image through Pollinations without exposing its API key."""
     if not POLLINATIONS_API_KEY:
         raise HTTPException(status_code=503, detail="Pollinations is not configured")
-    data = await request.json()
-    prompt = str(data.get("prompt", "")).strip()
+    prompt = request_data.prompt.strip()
     if not prompt:
         raise HTTPException(status_code=400, detail="Prompt required")
-    model = str(data.get("model", "flux"))
-    size = str(data.get("size", "1024x1024"))
+    model = request_data.model.strip() or "flux"
+    size = request_data.size.strip() or "1024x1024"
     width, height = (size.split("x", 1) if "x" in size else ("1024", "1024"))
     try:
         import httpx
@@ -281,7 +285,13 @@ async def generate_ad_image(request: Request):
                     "Content-Type": "application/json",
                     "Referer": POLLINATIONS_REFERRER,
                 },
-                json={"model": model, "prompt": prompt, "size": f"{width}x{height}", "n": 1},
+                json={
+                    "model": model,
+                    "prompt": prompt,
+                    "size": f"{width}x{height}",
+                    "n": 1,
+                    "response_format": "url",
+                },
             )
         if response.status_code >= 400:
             logger.error("Pollinations image API error: HTTP %s", response.status_code)
