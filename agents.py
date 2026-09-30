@@ -45,13 +45,78 @@ class BaseAgent:
         return result
 
     async def run(self,context,instruction):
+        import uuid
+        from src.event_bus import get_event_bus
+
+        run_id=str(uuid.uuid4())
+        bus=get_event_bus()
         self.status=AgentStatus.RUNNING
+        await bus.publish(
+            "agent.run.started",
+            {
+                "run_id":run_id,
+                "task_id":context.params.get("task_id"),
+                "email":context.email,
+                "agent":self.name,
+                "source_agent":self.name,
+                "instruction":instruction,
+            },
+            source=self.name,
+        )
         try:
             result=await self._execute(context,instruction)
-            self.result=result; self.status=AgentStatus.COMPLETED; return result
+            self.result=result
+            self.status=AgentStatus.COMPLETED
+            await bus.publish(
+                "agent.run.completed",
+                {
+                    "run_id":run_id,
+                    "task_id":context.params.get("task_id"),
+                    "email":context.email,
+                    "agent":self.name,
+                    "source_agent":self.name,
+                    "result":result,
+                },
+                source=self.name,
+            )
+            handoff=result.get("handoff") if isinstance(result,dict) else None
+            if handoff:
+                target=None
+                if isinstance(handoff,dict):
+                    target=handoff.get("target_agent") or handoff.get("agent")
+                    payload=handoff
+                else:
+                    payload={"message":str(handoff)}
+                await bus.publish(
+                    "agent.message.created",
+                    {
+                        "run_id":run_id,
+                        "task_id":context.params.get("task_id"),
+                        "email":context.email,
+                        "source_agent":self.name,
+                        "target_agent":target,
+                        "message_type":"handoff",
+                        "payload":payload,
+                    },
+                    source=self.name,
+                )
+            return result
         except Exception as exc:
-            self.status=AgentStatus.FAILED; logger.exception("Agent %s failed",self.name)
-            return {"agent":self.name,"error":str(exc),"status":"failed"}
+            self.status=AgentStatus.FAILED
+            logger.exception("Agent %s failed",self.name)
+            await bus.publish(
+                "agent.run.failed",
+                {
+                    "run_id":run_id,
+                    "task_id":context.params.get("task_id"),
+                    "email":context.email,
+                    "agent":self.name,
+                    "source_agent":self.name,
+                    "error":str(exc),
+                },
+                source=self.name,
+            )
+            return {"agent":self.name,"error":str(exc),"status":"failed","run_id":run_id}
     async def _execute(self,context,instruction): raise NotImplementedError
     def summary(self):
         return {"name":self.name,"description":self.description,"status":self.status.value,"tools":[t["name"] for t in self.tools]}
