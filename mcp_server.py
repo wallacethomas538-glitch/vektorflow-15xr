@@ -137,6 +137,31 @@ async def vektorflow_gemini_generate(prompt: str, model: str | None = None) -> s
     ))
 
 
+@server.tool(title="VektorFlow external tool status", annotations={"readOnlyHint": True})
+def vektorflow_tool_status() -> str:
+    return _text({"tools": tool_status()})
+
+
+@server.tool(title="Search the web with Brave", annotations={"readOnlyHint": True})
+async def vektorflow_brave_search(query: str, count: int = 10) -> str:
+    return _text(await brave_search(query, count))
+
+
+@server.tool(title="Research the web with Tavily", annotations={"readOnlyHint": True})
+async def vektorflow_tavily_search(query: str, max_results: int = 10) -> str:
+    return _text(await tavily_search(query, max_results))
+
+
+@server.tool(title="Run an Apify data extraction Actor", annotations={"readOnlyHint": True})
+async def vektorflow_apify_actor(actor_id: str, run_input: dict[str, Any] | None = None) -> str:
+    return _text(await apify_actor(actor_id, run_input or {}))
+
+
+@server.tool(title="Fetch or question a webpage", annotations={"readOnlyHint": True})
+async def vektorflow_webscraping_ai(url: str, question: str | None = None) -> str:
+    return _text(await webscraping_ai(url, question))
+
+
 def main() -> None:
     logging.basicConfig(
         stream=__import__("sys").stderr,
