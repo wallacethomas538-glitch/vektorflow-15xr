@@ -110,7 +110,7 @@ async def apify_actor(actor_id: str, run_input: dict[str, Any] | None = None) ->
     token = _require("apify_actor")
     async with httpx.AsyncClient(timeout=120) as client:
         response = await client.post(
-            f"https://api.apify.com/v2/acts/{actor_id}/run-sync-get-dataset-items",
+            f"https://api.apify.com/v2/actors/{actor_id}/run-sync-get-dataset-items",
             headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
             json=run_input or {},
         )
