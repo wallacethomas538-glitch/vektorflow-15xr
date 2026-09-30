@@ -1,11 +1,17 @@
-"""Event Bus for agent-to-agent communication."""
+"""Event Bus for VektorFlow agent-to-agent communication.
+
+The bus remains the authoritative in-process communication layer. Optional
+adapters (such as n8n) observe selected events; they do not replace the bus.
+"""
 
 import asyncio
 import logging
+import uuid
 from typing import Dict, List, Callable, Any
-from datetime import datetime
+from datetime import datetime, timezone
 
 from supabase_runtime import persist_event
+from src.n8n_adapter import forward_event_async
 
 logger = logging.getLogger(__name__)
 
@@ -18,29 +24,52 @@ class EventBus:
     def subscribe(self, event_type: str, callback: Callable) -> None:
         if event_type not in self._subscribers:
             self._subscribers[event_type] = []
-        self._subscribers[event_type].append(callback)
+        if callback not in self._subscribers[event_type]:
+            self._subscribers[event_type].append(callback)
 
-    async def publish(self, event_type: str, data: Dict[str, Any], source: str = "system") -> None:
+    async def publish(
+        self,
+        event_type: str,
+        data: Dict[str, Any],
+        source: str = "system",
+    ) -> Dict[str, Any]:
+        event_data = dict(data or {})
+        event_id = str(event_data.get("event_id") or "evt_" + uuid.uuid4().hex)
+        event_data["event_id"] = event_id
         event = {
+            "event_id": event_id,
             "type": event_type,
-            "data": data,
+            "data": event_data,
             "source": source,
-            "timestamp": datetime.utcnow().isoformat()
+            "timestamp": datetime.now(timezone.utc).isoformat(),
         }
         self._event_history.append(event)
+
         try:
             await asyncio.to_thread(persist_event, event)
         except Exception as exc:
             logger.debug("Durable event persistence unavailable: %s", exc)
+
+        # Local subscribers are the primary VektorFlow communication path.
         if event_type in self._subscribers:
-            for callback in self._subscribers[event_type]:
+            for callback in list(self._subscribers[event_type]):
                 try:
                     if asyncio.iscoroutinefunction(callback):
                         await callback(event)
                     else:
                         callback(event)
-                except Exception as e:
-                    logger.error(f"Event callback error: {e}")
+                except Exception as exc:
+                    logger.error("Event callback error for %s: %s", event_id, exc)
+
+        # n8n is an optional workflow/tool adapter, never the source of truth.
+        try:
+            delivered = await forward_event_async(event)
+            if not delivered:
+                logger.error("n8n adapter did not deliver event %s", event_id)
+        except Exception as exc:
+            logger.error("n8n adapter error for %s: %s", event_id, exc)
+
+        return event
 
     def get_history(self, limit: int = 50) -> List[Dict]:
         return self._event_history[-limit:]
