@@ -11,7 +11,7 @@ LLM_GATEWAY_URL = os.getenv("LLM_GATEWAY_URL", "").rstrip("/")
 LLM_GATEWAY_API_KEY = os.getenv("LLM_GATEWAY_API_KEY", "")
 LLM_GATEWAY_PROVIDER = os.getenv("LLM_GATEWAY_PROVIDER", "openrouter")
 LLM_GATEWAY_MODEL = os.getenv("LLM_GATEWAY_MODEL", "openrouter/free")
-DEFAULT_MODEL = os.getenv("VEKTORFLOW_MODEL", "gateway/" + LLM_GATEWAY_MODEL if LLM_GATEWAY_URL else "ollama/llama3.2")
+DEFAULT_MODEL = os.getenv("VEKTORFLOW_MODEL", "ollama/qwen2.5:0.5b-instruct")
 
 # Comma-separated Ollama endpoints. The first endpoint is used first, then
 # subsequent endpoints are tried automatically when a request fails.
@@ -91,6 +91,8 @@ async def call_llm(prompt: str, model: str, user_keys: Dict) -> Dict:
         return await call_gateway(prompt, model[len("gateway/"):])
 
     provider = MODEL_PROVIDER.get(model)
+    if not provider and model.startswith("ollama/"):
+        provider = "ollama"
     if not provider:
         return {"success": False, "error": f"Unknown model: {model}"}
     
