@@ -1,0 +1,19 @@
+# Add this entry to the existing mcp_servers map in ~/.hermes/config.yaml.
+# Keep Gemini credentials in Hermes' environment; never commit them here.
+mcp_servers:
+  vektorflow:
+    command: python
+    args: ["mcp_server.py"]
+    cwd: "/data/data/com.termux/files/home/vektorflow-15xr"
+    env:
+      PYTHONPATH: "/data/data/com.termux/files/home/vektorflow-15xr"
+      GEMINI_API_KEY: "${GEMINI_API_KEY}"
+      VEKTORFLOW_GEMINI_MODEL: "gemini-3.5-flash"
+      VEKTORFLOW_LOG_LEVEL: "INFO"
+    enabled: true
+    timeout: 60
+    connect_timeout: 20
+    supports_parallel_tool_calls: true
+    tools:
+      resources: false
+      prompts: false
