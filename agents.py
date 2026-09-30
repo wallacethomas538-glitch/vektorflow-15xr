@@ -66,15 +66,28 @@ Shared work from other agents:
 Business context: {json.dumps(context.params,default=str)}
 Conversation with this agent:
 {json.dumps(context.conversation_history[-12:],default=str)}
-Return concise JSON with keys: status, message, actions, handoff, evidence. Evidence should contain concrete findings or reasoning when the task asks for analysis. Never return empty work when the assigned duty can be performed from the supplied context.
+Respond naturally as the {self.name} agent. Do not return JSON, markdown data structures, status objects, tool metadata, or empty placeholders. Speak directly to the user like a real business specialist. Give concrete reasoning, findings, and next actions when the available evidence supports them. Be honest when required data is not available. Never claim an external action was completed unless the connected integration actually performed it."""
+        result=await call_llm(prompt,DEFAULT_MODEL,context.llm_keys)
+        return result.get("response","I am ready to help, but I do not have enough information to answer that yet.").strip()
+
+    async def _llm_structured(self,context,instruction):
+        shared=json.dumps(context.results,default=str)[-12000:]
+        prompt=f"""You are the {self.name} agent in VektorFlow 15XR.
+Duty: {self.description}
+User goal/instruction: {instruction}
+Shared work from other agents:
+{shared}
+Business context: {json.dumps(context.params,default=str)}
+Return concise JSON with keys: status, message, actions, handoff, evidence. The message must be a natural response from the agent, not JSON or tool metadata. Never return an empty message when the assigned duty can be performed from the supplied context.
 Never claim an external action was completed unless the connected integration actually performed it."""
         result=await call_llm(prompt,DEFAULT_MODEL,context.llm_keys)
         text=result.get("response","")
         try:
             match=re.search(r"\{.*\}",text,re.DOTALL)
-            return json.loads(match.group(0) if match else text)
-        except Exception:
-            return {"status":"completed","message":text,"actions":[],"handoff":""}
+            parsed=json.loads(match.group(0) if match else text)
+            if isinstance(parsed,dict): return parsed
+        except Exception: pass
+        return {"status":"completed","message":text.strip(),"actions":[],"handoff":"","evidence":""}
 
 class ScoutAgent(BaseAgent):
     def __init__(self):
@@ -95,7 +108,7 @@ class ScoutAgent(BaseAgent):
         return await self._llm_role(context, instruction)
 
 class RoleAgent(BaseAgent):
-    async def _execute(self,context,instruction): return await self._llm_role(context,instruction)
+    async def _execute(self,context,instruction): return await self._llm_structured(context,instruction)
 
 
 def _read_team_results(context, agent_name=None):
@@ -116,9 +129,15 @@ class SmaugAgent(RoleAgent):
         team_results=await self.use_tool("read_team_results",context)
         context.params["smaug_input"]=team_results
         result=await self._llm_role(context,instruction)
-        if isinstance(result,dict):
-            result["tool_calls"]=[{"tool":"read_team_results","status":"completed","agents_available":list(team_results.keys())}]
-        return result
+        return {
+            "agent": self.name,
+            "status": "completed",
+            "message": result,
+            "actions": [],
+            "handoff": "",
+            "evidence": team_results,
+            "tool_calls": [{"tool":"read_team_results","status":"completed","agents_available":list(team_results.keys())}]
+        }
 
 
 class AdImageAgent:
