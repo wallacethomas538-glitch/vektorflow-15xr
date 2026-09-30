@@ -50,6 +50,26 @@ class BaseAgent:
 
         run_id=str(uuid.uuid4())
         bus=get_event_bus()
+
+        # Consume targeted EventBus handoffs before executing this agent's task.
+        pending_messages=bus.receive_agent_messages(self.name, limit=20)
+        if pending_messages:
+            handoffs=[]
+            for message in pending_messages:
+                data=message.get("data",{}) if isinstance(message,dict) else {}
+                handoffs.append({
+                    "source_agent":data.get("source_agent") or message.get("source_agent"),
+                    "message_type":data.get("message_type") or message.get("message_type"),
+                    "payload":data.get("payload") if "payload" in data else message.get("payload"),
+                    "event_id":message.get("event_id"),
+                })
+            handoff_context=(
+                "\n\nIncoming agent handoffs from EventBus:\n"
+                + json.dumps(handoffs,default=str)
+                + "\nUse these handoffs as additional task context. Do not claim work was completed unless you actually perform it."
+            )
+            instruction=f"{instruction}{handoff_context}"
+
         self.status=AgentStatus.RUNNING
         await bus.publish(
             "agent.run.started",
