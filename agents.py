@@ -178,8 +178,8 @@ Never claim an external action was completed unless the connected integration ac
 class ScoutAgent(BaseAgent):
     def __init__(self):
         super().__init__("Scout","Discovers products, niches, demand and trends.",
-            _tools("search_cj_products","get_tiktok_trends","get_google_trends"),
-            {"search_cj_products":search_cj_products,"get_tiktok_trends":_tiktok_trends,"get_google_trends":_google_trends})
+            _tools("search_cj_products","get_tiktok_trends","get_google_trends","brave_search","tavily_search","apify_actor"),
+            {"search_cj_products":search_cj_products,"get_tiktok_trends":_tiktok_trends,"get_google_trends":_google_trends,"brave_search":_brave_search,"tavily_search":_tavily_search,"apify_actor":_apify_actor})
     async def _execute(self,context,instruction):
         normalized = instruction.lower().strip()
         # Direct conversation should go through the LLM. Tool-backed discovery
