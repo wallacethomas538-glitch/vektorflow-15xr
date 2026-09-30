@@ -321,6 +321,12 @@ async def generate_organic_content_endpoint(request: OrganicContentRequest):
     result=await generate_organic_content(email=request.email or "commander@vektorflow.com",product_name=request.product_name,product_description=request.product_description,platforms=request.platforms,tone=request.tone,number_of_options=request.number_of_options)
     return {"status":"success" if result.get("success") else "error","content":result.get("content",{}),"content_id":result.get("content_id"),"task_id":result.get("task_id"),"timestamp":datetime.utcnow().isoformat()}
 
+
+@app.get("/api/tools")
+async def list_external_tools():
+    from external_tools import tool_status
+    return {"status": "success", "tools": tool_status(), "timestamp": datetime.utcnow().isoformat()}
+
 @app.get("/api/info")
 async def api_info():
     return {
