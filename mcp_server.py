@@ -11,6 +11,7 @@ import httpx
 from mcp.server import MCPServer
 
 from agents import run_agent_task
+from external_tools import tool_status, brave_search, tavily_search, apify_actor, webscraping_ai
 
 logger = logging.getLogger("vektorflow.mcp")
 
