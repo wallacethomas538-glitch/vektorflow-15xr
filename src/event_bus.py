@@ -20,6 +20,7 @@ class EventBus:
     def __init__(self):
         self._subscribers: Dict[str, List[Callable]] = {}
         self._event_history: List[Dict] = []
+        self._agent_inboxes: Dict[str, List[Dict]] = {}
 
     def subscribe(self, event_type: str, callback: Callable) -> None:
         if event_type not in self._subscribers:
@@ -61,6 +62,13 @@ class EventBus:
                 except Exception as exc:
                     logger.error("Event callback error for %s: %s", event_id, exc)
 
+        # A targeted handoff becomes an inbox item for the receiving agent.
+        if event_type == "agent.message.created":
+            target = event_data.get("target_agent")
+            if target:
+                key = str(target).strip().lower()
+                self._agent_inboxes.setdefault(key, []).append(event)
+
         # n8n is an optional workflow/tool adapter, never the source of truth.
         try:
             delivered = await forward_event_async(event)
@@ -73,6 +81,14 @@ class EventBus:
 
     def get_history(self, limit: int = 50) -> List[Dict]:
         return self._event_history[-limit:]
+
+    def receive_agent_messages(self, agent_name: str, limit: int = 20) -> List[Dict]:
+        """Return and remove pending targeted messages for an agent."""
+        key = str(agent_name).strip().lower()
+        inbox = self._agent_inboxes.get(key, [])
+        messages = inbox[-limit:]
+        self._agent_inboxes[key] = []
+        return messages
 
 
 _event_bus = EventBus()
