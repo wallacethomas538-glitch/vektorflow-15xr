@@ -11,6 +11,7 @@ from database import get_user, get_user_stores, get_llm_keys, get_icp_data, save
 from llm_handler import call_llm, DEFAULT_MODEL
 from store_manager import search_cj_products
 from trend_engine import get_tiktok_trends
+from external_tools import brave_search, tavily_search, apify_actor, webscraping_ai
 
 logger = logging.getLogger("vektorflow")
 
@@ -311,11 +312,19 @@ async def _google_trends(context, keyword="dropshipping products"):
 async def _tiktok_trends(context): return await get_tiktok_trends()
 async def _memory(context): return get_all_memory(context.email)
 async def _stores(context): return get_user_stores(context.email) or []
+async def _brave_search(context, query=""):
+    return await brave_search(query)
+async def _tavily_search(context, query=""):
+    return await tavily_search(query)
+async def _apify_actor(context, actor_id="", run_input=None):
+    return await apify_actor(actor_id, run_input or {})
+async def _webscraping_ai(context, url="", question=None):
+    return await webscraping_ai(url, question)
 def _tools(*names):
-    catalog={"search_cj_products":{"name":"search_cj_products","description":"Search supplier catalog"},"get_tiktok_trends":{"name":"get_tiktok_trends","description":"Find TikTok trend signals"},"get_google_trends":{"name":"get_google_trends","description":"Find Google trend signals"},"read_team_results":{"name":"read_team_results","description":"Read results from other agents"},"check_inventory":{"name":"check_inventory","description":"Check connected-store inventory and alerts"},"get_inventory_alerts":{"name":"get_inventory_alerts","description":"Summarize inventory alerts"},"get_stores":{"name":"get_stores","description":"Read connected store configuration"},"generate_seo":{"name":"generate_seo","description":"Generate SEO metadata"},"seo_research":{"name":"seo_research","description":"Run provider-neutral SEO keyword clustering and on-page audit"},"generate_content":{"name":"generate_content","description":"Generate organic content"},"generate_campaign":{"name":"generate_campaign","description":"Generate a marketing campaign"},"generate_outreach":{"name":"generate_outreach","description":"Generate customer outreach"},"system_health":{"name":"system_health","description":"Check VektorFlow service health"},"agent_roster":{"name":"agent_roster","description":"Read the active 15-agent roster"},"read_memory":{"name":"read_memory","description":"Read shared VektorFlow memory"}}
+    catalog={"search_cj_products":{"name":"search_cj_products","description":"Search supplier catalog"},"get_tiktok_trends":{"name":"get_tiktok_trends","description":"Find TikTok trend signals"},"get_google_trends":{"name":"get_google_trends","description":"Find Google trend signals"},"read_team_results":{"name":"read_team_results","description":"Read results from other agents"},"check_inventory":{"name":"check_inventory","description":"Check connected-store inventory and alerts"},"get_inventory_alerts":{"name":"get_inventory_alerts","description":"Summarize inventory alerts"},"get_stores":{"name":"get_stores","description":"Read connected store configuration"},"generate_seo":{"name":"generate_seo","description":"Generate SEO metadata"},"seo_research":{"name":"seo_research","description":"Run provider-neutral SEO keyword clustering and on-page audit"},"generate_content":{"name":"generate_content","description":"Generate organic content"},"generate_campaign":{"name":"generate_campaign","description":"Generate a marketing campaign"},"generate_outreach":{"name":"generate_outreach","description":"Generate customer outreach"},"system_health":{"name":"system_health","description":"Check VektorFlow service health"},"agent_roster":{"name":"agent_roster","description":"Read the active 15-agent roster"},"read_memory":{"name":"read_memory","description":"Read shared VektorFlow memory"},"brave_search":{"name":"brave_search","description":"Search the web for current research and competitive intelligence"},"tavily_search":{"name":"tavily_search","description":"Run agent-oriented web research with grounded sources"},"apify_actor":{"name":"apify_actor","description":"Run an Apify web-data extraction Actor"},"webscraping_ai":{"name":"webscraping_ai","description":"Fetch or question a webpage through a rendering/extraction API"}}
     return [catalog[n] for n in names]
 def _handler_map(names):
-    return {"search_cj_products":search_cj_products,"get_tiktok_trends":_tiktok_trends,"get_google_trends":_google_trends,"read_team_results":_read_team_results,"check_inventory":_inventory_check,"get_inventory_alerts":_inventory_alerts,"get_stores":_stores,"generate_seo":_seo,"seo_research":_seo_research,"generate_content":_organic_content,"generate_campaign":_campaign,"generate_outreach":_outreach,"system_health":_agent_health,"agent_roster":_agent_info,"read_memory":_memory}
+    return {"search_cj_products":search_cj_products,"get_tiktok_trends":_tiktok_trends,"get_google_trends":_google_trends,"read_team_results":_read_team_results,"check_inventory":_inventory_check,"get_inventory_alerts":_inventory_alerts,"get_stores":_stores,"generate_seo":_seo,"seo_research":_seo_research,"generate_content":_organic_content,"generate_campaign":_campaign,"generate_outreach":_outreach,"system_health":_agent_health,"agent_roster":_agent_info,"read_memory":_memory,"brave_search":_brave_search,"tavily_search":_tavily_search,"apify_actor":_apify_actor,"webscraping_ai":_webscraping_ai}
 
 AGENT_ROLES=[
 ("Scout","Discovers products, niches, demand and trends."),
@@ -344,7 +353,7 @@ class Orchestrator:
             elif name=="Smaug":
                 agent=SmaugAgent(name,description)
             else:
-                tool_sets={"Architect":["agent_roster","read_team_results"],"DaVinci":["generate_content","generate_seo","seo_research"],"Rook":["check_inventory","get_stores"],"Aegis":["system_health","get_stores"],"Arbiter":["agent_roster","read_team_results"],"Sentinel":["system_health","check_inventory","get_inventory_alerts"],"Echo":["generate_outreach","read_memory"],"Cerebrum":["read_memory","read_team_results"],"ViralDet":["get_tiktok_trends","get_google_trends"],"Shadow":["get_google_trends","get_tiktok_trends","seo_research"],"Bundler":["read_team_results","generate_campaign"],"Pivot":["read_team_results","generate_campaign"],"Oracle":["read_team_results","read_memory"]}.get(name,["read_team_results"])
+                tool_sets={"Architect":["agent_roster","read_team_results"],"DaVinci":["generate_content","generate_seo","seo_research","webscraping_ai"],"Rook":["check_inventory","get_stores"],"Aegis":["system_health","get_stores"],"Arbiter":["agent_roster","read_team_results"],"Sentinel":["system_health","check_inventory","get_inventory_alerts"],"Echo":["generate_outreach","read_memory"],"Cerebrum":["read_memory","read_team_results"],"ViralDet":["get_tiktok_trends","get_google_trends","brave_search","tavily_search"],"Shadow":["get_google_trends","get_tiktok_trends","seo_research","brave_search","tavily_search","webscraping_ai"],"Bundler":["read_team_results","generate_campaign"],"Pivot":["read_team_results","generate_campaign"],"Oracle":["read_team_results","read_memory"]}.get(name,["read_team_results"])
                 handlers=_handler_map(tool_sets)
                 agent=RoleAgent(name,description,_tools(*tool_sets),handlers)
             self.register_agent(agent)
