@@ -5,6 +5,8 @@ import logging
 from typing import Dict, List, Callable, Any
 from datetime import datetime
 
+from supabase_runtime import persist_event
+
 logger = logging.getLogger(__name__)
 
 
@@ -26,6 +28,10 @@ class EventBus:
             "timestamp": datetime.utcnow().isoformat()
         }
         self._event_history.append(event)
+        try:
+            await asyncio.to_thread(persist_event, event)
+        except Exception as exc:
+            logger.debug("Durable event persistence unavailable: %s", exc)
         if event_type in self._subscribers:
             for callback in self._subscribers[event_type]:
                 try:
