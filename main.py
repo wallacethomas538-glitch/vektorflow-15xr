@@ -105,6 +105,21 @@ async def root():
 async def health():
     return {"status":"healthy","service":"VektorFlow 15xr","timestamp":datetime.utcnow().isoformat()}
 
+@app.get("/health/supabase")
+async def supabase_health():
+    configured = bool(os.environ.get("DATABASE_URL"))
+    connected = False
+    if configured:
+        try:
+            from supabase_runtime import _connect
+            conn = _connect()
+            connected = conn is not None
+            if conn is not None:
+                conn.close()
+        except Exception:
+            connected = False
+    return {"status":"ok" if connected else "not_connected","database_url_configured":configured,"supabase_postgres_connected":connected}
+
 @app.post("/commander/login")
 async def commander_login(login_data: CommanderLogin):
     try:
