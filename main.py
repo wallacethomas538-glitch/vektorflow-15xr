@@ -90,6 +90,10 @@ class AgentChatRequest(BaseModel):
     conversation_history: Optional[List[Dict[str, Any]]] = []
     params: Optional[Dict[str, Any]] = {}
 
+class AgentToolRequest(BaseModel):
+    email: str = "commander@vektorflow.com"
+    arguments: Optional[Dict[str, Any]] = {}
+
 class AdImageRequest(BaseModel):
     prompt: str
     model: str = "flux"
@@ -198,6 +202,26 @@ async def get_agent(agent_name: str):
     agent=get_orchestrator().get_agent(agent_name)
     if not agent: raise HTTPException(status_code=404,detail="Agent not found")
     return {"status":"success","agent":agent.summary(),"timestamp":datetime.utcnow().isoformat()}
+
+@app.post("/api/agents/{agent_name}/tools/{tool_name}")
+async def agent_tool(agent_name: str, tool_name: str, request: AgentToolRequest):
+    from agents import AgentContext
+    agent = get_orchestrator().get_agent(agent_name)
+    if not agent:
+        raise HTTPException(status_code=404, detail="Agent not found")
+    if tool_name not in {t.get("name") for t in agent.tools}:
+        raise HTTPException(status_code=404, detail=f"Tool '{tool_name}' is not available to {agent_name}")
+    email=request.email or "commander@vektorflow.com"
+    context=AgentContext(email=email,user=get_user(email) or {},stores=get_user_stores(email) or [],
+        llm_keys=get_llm_keys(email) or {},icp=get_icp_data(email) or {},memory=get_all_memory(email) or {},
+        params=request.arguments or {})
+    context.params["agent_name"]=agent.name
+    try:
+        result=await agent.use_tool(tool_name,context,**(request.arguments or {}))
+        return {"status":"success","agent":agent.name,"tool":tool_name,"result":result,"timestamp":datetime.utcnow().isoformat()}
+    except Exception as e:
+        logger.error("Agent tool error: %s", e)
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/api/agents/{agent_name}/chat")
 async def agent_specific_chat(agent_name: str, request: AgentChatRequest):
