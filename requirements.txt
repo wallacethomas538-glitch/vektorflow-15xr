@@ -11,4 +11,5 @@ bcrypt
 python-jose[cryptography]
 passlib[bcrypt]
 email-validator
-crewai\npsycopg[binary]\n
+crewai
+psycopg[binary]
