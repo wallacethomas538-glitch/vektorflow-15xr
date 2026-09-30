@@ -157,7 +157,8 @@ Never claim an external action was completed unless the connected integration ac
 class ScoutAgent(BaseAgent):
     def __init__(self):
         super().__init__("Scout","Discovers products, niches, demand and trends.",
-            [{"name":"search_cj_products","description":"Search supplier catalog"},{"name":"get_tiktok_trends","description":"Find product trends"}])
+            _tools("search_cj_products","get_tiktok_trends","get_google_trends"),
+            {"search_cj_products":search_cj_products,"get_tiktok_trends":_tiktok_trends,"get_google_trends":_google_trends})
     async def _execute(self,context,instruction):
         normalized = instruction.lower().strip()
         # Direct conversation should go through the LLM. Tool-backed discovery
@@ -186,9 +187,7 @@ def _read_team_results(context, agent_name=None):
 
 class SmaugAgent(RoleAgent):
     def __init__(self,name="Smaug",description="Owns profit strategy, unit economics, budgets and treasury decisions."):
-        super().__init__(name,description,
-            [{"name":"read_team_results","description":"Read structured findings produced by earlier agents."}],
-            {"read_team_results":_read_team_results})
+        super().__init__(name,description,_tools("read_team_results","check_inventory"),{"read_team_results":_read_team_results,"check_inventory":_inventory_check})
 
     async def _execute(self,context,instruction):
         team_results=await self.use_tool("read_team_results",context)
@@ -263,6 +262,37 @@ _ad_specialist = AdImageAgent()
 def get_ad_specialist():
     return _ad_specialist
 
+
+def _agent_health(context): return {"status":"healthy","agent":context.params.get("agent_name","unknown")}
+def _agent_info(context): return get_orchestrator().roster()
+async def _inventory_check(context):
+    from inventory import InventoryMonitor
+    return await InventoryMonitor(context.email).check_all_stores()
+async def _inventory_alerts(context):
+    from inventory import InventoryMonitor
+    return await InventoryMonitor(context.email).get_alert_summary()
+async def _organic_content(context, product_name="product", product_description="", platforms=None, tone="casual"):
+    from organic_content import OrganicContentGenerator
+    return await OrganicContentGenerator(context.email).generate_content(product_name, product_description, platforms or ["instagram","facebook","tiktok"], tone, 3)
+async def _campaign(context, product_type="product", goal="increase sales"):
+    from campaign import generate_campaign
+    return await generate_campaign(context.email, product_type, goal)
+async def _outreach(context): return await handle_outreach("generate outreach", context.llm_keys, context.icp, context.email)
+async def _seo(context, product_title="product", description="", category="general", keywords=None):
+    from seo_optimizer import generate_seo_metadata
+    return await generate_seo_metadata(product_title, description, category, keywords or [product_title], context.llm_keys)
+async def _google_trends(context, keyword="dropshipping products"):
+    from trend_engine import get_google_trends
+    return await get_google_trends(keyword)
+async def _tiktok_trends(context): return await get_tiktok_trends()
+async def _memory(context): return get_all_memory(context.email)
+async def _stores(context): return get_user_stores(context.email) or []
+def _tools(*names):
+    catalog={"search_cj_products":{"name":"search_cj_products","description":"Search supplier catalog"},"get_tiktok_trends":{"name":"get_tiktok_trends","description":"Find TikTok trend signals"},"get_google_trends":{"name":"get_google_trends","description":"Find Google trend signals"},"read_team_results":{"name":"read_team_results","description":"Read results from other agents"},"check_inventory":{"name":"check_inventory","description":"Check connected-store inventory and alerts"},"get_inventory_alerts":{"name":"get_inventory_alerts","description":"Summarize inventory alerts"},"get_stores":{"name":"get_stores","description":"Read connected store configuration"},"generate_seo":{"name":"generate_seo","description":"Generate SEO metadata"},"generate_content":{"name":"generate_content","description":"Generate organic content"},"generate_campaign":{"name":"generate_campaign","description":"Generate a marketing campaign"},"generate_outreach":{"name":"generate_outreach","description":"Generate customer outreach"},"system_health":{"name":"system_health","description":"Check VektorFlow service health"},"agent_roster":{"name":"agent_roster","description":"Read the active 15-agent roster"},"read_memory":{"name":"read_memory","description":"Read shared VektorFlow memory"}}
+    return [catalog[n] for n in names]
+def _handler_map(names):
+    return {"search_cj_products":search_cj_products,"get_tiktok_trends":_tiktok_trends,"get_google_trends":_google_trends,"read_team_results":_read_team_results,"check_inventory":_inventory_check,"get_inventory_alerts":_inventory_alerts,"get_stores":_stores,"generate_seo":_seo,"generate_content":_organic_content,"generate_campaign":_campaign,"generate_outreach":_outreach,"system_health":_agent_health,"agent_roster":_agent_info,"read_memory":_memory}
+
 AGENT_ROLES=[
 ("Scout","Discovers products, niches, demand and trends."),
 ("Smaug","Owns profit strategy, unit economics, budgets and treasury decisions."),
@@ -290,7 +320,9 @@ class Orchestrator:
             elif name=="Smaug":
                 agent=SmaugAgent(name,description)
             else:
-                agent=RoleAgent(name,description)
+                tool_sets={"Architect":["agent_roster","read_team_results"],"DaVinci":["generate_content","generate_seo"],"Rook":["check_inventory","get_stores"],"Aegis":["system_health","get_stores"],"Arbiter":["agent_roster","read_team_results"],"Sentinel":["system_health","check_inventory","get_inventory_alerts"],"Echo":["generate_outreach","read_memory"],"Cerebrum":["read_memory","read_team_results"],"ViralDet":["get_tiktok_trends","get_google_trends"],"Shadow":["get_google_trends","get_tiktok_trends"],"Bundler":["read_team_results","generate_campaign"],"Pivot":["read_team_results","generate_campaign"],"Oracle":["read_team_results","read_memory"]}.get(name,["read_team_results"])
+                handlers=_handler_map(tool_sets)
+                agent=RoleAgent(name,description,_tools(*tool_sets),handlers)
             self.register_agent(agent)
     def register_agent(self,agent): self.agents[agent.name.lower()]=agent
     def get_agent(self,name): return self.agents.get(name.lower())
