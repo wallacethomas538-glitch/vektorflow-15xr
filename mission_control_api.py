@@ -52,6 +52,7 @@ class ActionProposalCreate(BaseModel):
     action: str
     risk: str = "medium"
     email: str = "commander@vektorflow.com"
+    mission_id: Optional[str] = None
     task_id: Optional[str] = None
     payload: Dict[str, Any] = Field(default_factory=dict)
     reason: str = ""
@@ -110,6 +111,59 @@ async def transition(mission_id: str, data: TransitionRequest):
         raise HTTPException(409, str(exc))
 
 
+@router.post("/missions/{mission_id}/plan")
+async def plan_mission(mission_id: str, email: str = "commander@vektorflow.com"):
+    """Create the canonical 15-agent task plan without executing external actions."""
+    mission = get_mission(mission_id, email)
+    if not mission:
+        raise HTTPException(404, "Mission not found")
+    try:
+        if mission["state"] == "draft":
+            transition_mission(mission_id, "planning", "mission-planner", email)
+        existing = list_tasks(mission_id)
+        if not existing:
+            from agents import AGENT_ROLES
+            for name, description in AGENT_ROLES:
+                add_task(mission_id, name, f"{mission['objective']} — {description}", [], "medium")
+        if get_mission(mission_id, email)["state"] == "planning":
+            transition_mission(mission_id, "ready", "mission-planner", email, {"task_count": 15})
+        return {"status": "success", "mission": get_mission(mission_id, email), "tasks": list_tasks(mission_id)}
+    except ValueError as exc:
+        raise HTTPException(409, str(exc))
+
+
+@router.post("/missions/{mission_id}/execute")
+async def execute_mission(mission_id: str, email: str = "commander@vektorflow.com"):
+    """Execute an approved mission through the existing VektorFlow orchestrator."""
+    mission = get_mission(mission_id, email)
+    if not mission:
+        raise HTTPException(404, "Mission not found")
+    if mission["state"] not in {"ready", "approved"}:
+        raise HTTPException(409, f"Mission must be ready or approved; current state is {mission['state']}")
+    try:
+        transition_mission(mission_id, "executing", "mission-control", email)
+        from agents import AgentContext, get_orchestrator
+        from database import get_user, get_user_stores, get_llm_keys, get_icp_data, get_all_memory
+        context = AgentContext(
+            email=email,
+            user=get_user(email) or {},
+            stores=get_user_stores(email) or [],
+            llm_keys=get_llm_keys(email) or {},
+            icp=get_icp_data(email) or {},
+            memory=get_all_memory(email) or {},
+            params={"mission_id": mission_id, "mission": mission},
+        )
+        result = await get_orchestrator().team_execute(mission["objective"], context)
+        transition_mission(mission_id, "completed", "mission-control", email, {"agent_count": 15})
+        return {"status": "success", "mission": get_mission(mission_id, email), "result": result}
+    except Exception as exc:
+        try:
+            transition_mission(mission_id, "failed", "mission-control", email, {"error": str(exc)})
+        except Exception:
+            pass
+        raise HTTPException(502, f"Mission execution failed: {exc}")
+
+
 @router.post("/missions/{mission_id}/tasks")
 async def task(mission_id: str, data: TaskCreate):
     if not get_mission(mission_id):
@@ -128,7 +182,7 @@ async def tasks(mission_id: str):
 async def action_propose(data: ActionProposalCreate):
     return {"status": "success", "proposal": propose_action(
         email=data.email, agent=data.agent, action=data.action, risk=data.risk,
-        mission_id=None, task_id=data.task_id, payload=data.payload, reason=data.reason,
+        mission_id=data.mission_id, task_id=data.task_id, payload=data.payload, reason=data.reason,
     )}
 
 
