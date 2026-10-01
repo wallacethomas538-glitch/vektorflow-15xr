@@ -18,6 +18,7 @@ import os
 from typing import Any, Dict, Optional
 
 from opentelemetry import trace
+from opentelemetry.trace import Status, StatusCode
 from opentelemetry.sdk.resources import Resource
 from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import BatchSpanProcessor
@@ -63,12 +64,6 @@ def initialize_observability() -> Dict[str, Any]:
         return observability_status()
 
     exporters = []
-    providers = []
-    if _langfuse_exporter() is not None:
-        providers.append("langfuse")
-    if _phoenix_exporter() is not None:
-        providers.append("phoenix")
-
     resource = Resource.create({
         "service.name": os.getenv("VF_OTEL_SERVICE_NAME", "vektorflow-15xr"),
         "service.version": os.getenv("VEKTORFLOW_VERSION", "1.1"),
@@ -127,10 +122,7 @@ class _SpanContext:
         if exc_value is not None:
             try:
                 self._span.record_exception(exc_value)
-                self._span.set_status(__import__("opentelemetry").trace.Status(
-                    __import__("opentelemetry").trace.StatusCode.ERROR,
-                    str(exc_value),
-                ))
+                self._span.set_status(Status(StatusCode.ERROR, str(exc_value)))
             except Exception:
                 pass
         return self._context.__exit__(exc_type, exc_value, traceback)
