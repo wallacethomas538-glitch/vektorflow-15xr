@@ -22,6 +22,7 @@ from campaign import generate_campaign
 from organic_content import generate_organic_content
 from mission_control_api import router as mission_control_router
 from memory_api import router as memory_router
+from ai_observability import observability_status
 
 app = FastAPI(title="VektorFlow 15xr", version="1.1")
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
@@ -325,6 +326,11 @@ async def generate_organic_content_endpoint(request: OrganicContentRequest):
     result=await generate_organic_content(email=request.email or "commander@vektorflow.com",product_name=request.product_name,product_description=request.product_description,platforms=request.platforms,tone=request.tone,number_of_options=request.number_of_options)
     return {"status":"success" if result.get("success") else "error","content":result.get("content",{}),"content_id":result.get("content_id"),"task_id":result.get("task_id"),"timestamp":datetime.utcnow().isoformat()}
 
+
+@app.get("/api/observability")
+async def observability():
+    """Report configured AI observability backends without exposing credentials."""
+    return {"status": "success", "observability": observability_status(), "timestamp": datetime.utcnow().isoformat()}
 
 @app.get("/api/tools")
 async def list_external_tools():
