@@ -21,6 +21,8 @@ from inventory import check_inventory, get_inventory_alerts, get_reorder_recomme
 from campaign import generate_campaign
 from organic_content import generate_organic_content
 from mission_control_api import router as mission_control_router
+from policy_engine import authorize_tool
+from tool_registry import build_registry, agent_can_use_tool
 
 app = FastAPI(title="VektorFlow 15xr", version="1.1")
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
@@ -205,17 +207,45 @@ async def get_agent(agent_name: str):
     if not agent: raise HTTPException(status_code=404,detail="Agent not found")
     return {"status":"success","agent":agent.summary(),"timestamp":datetime.utcnow().isoformat()}
 
+@app.get("/api/tools/registry")
+async def tool_registry():
+    """Expose the canonical agent/tool capability contract to the dashboard."""
+    return {"status":"success","registry":build_registry(get_orchestrator())}
+
 @app.post("/api/agents/{agent_name}/tools/{tool_name}")
 async def agent_tool(agent_name: str, tool_name: str, request: AgentToolRequest):
     from agents import AgentContext
     agent = get_orchestrator().get_agent(agent_name)
     if not agent:
         raise HTTPException(status_code=404, detail="Agent not found")
-    if tool_name not in {t.get("name") for t in agent.tools}:
-        raise HTTPException(status_code=404, detail=f"Tool '{tool_name}' is not available to {agent_name}")
+    if not agent_can_use_tool(get_orchestrator(), agent_name, tool_name):
+        raise HTTPException(status_code=403, detail=f"Tool '{tool_name}' is not authorized for {agent_name}")
+
     email=request.email or "commander@vektorflow.com"
+    mission_id=(request.arguments or {}).get("mission_id")
+    policy=authorize_tool(
+        agent.name, tool_name,
+        mission_id=mission_id,
+        risk="medium",
+        require_approval=bool((request.arguments or {}).get("require_approval", False)),
+    )
+    if policy["decision"] != "allow":
+        from mission_control import propose_action
+        proposal=propose_action(
+            email=email, agent=agent.name, action=f"tool:{tool_name}",
+            risk="high" if policy["decision"] == "ask" else "critical",
+            mission_id=mission_id, payload={"arguments":request.arguments or {}},
+            reason=policy["reason"],
+        )
+        status_code=202 if policy["decision"] == "ask" else 403
+        return JSONResponse(
+            status_code=status_code,
+            content={"status":"approval_required" if status_code == 202 else "rejected",
+                     "policy":policy,"proposal":proposal},
+        )
+
     context=AgentContext(email=email,user=get_user(email) or {},stores=get_user_stores(email) or [],
-        llm_keys=get_llm_keys(email) or {},icp=get_icp_data(email) or {},memory=get_all_memory(email) or {},
+        llm_keys=get_llm_keys(email) or {},icp=get_icp_data(email) or {},memory=get_all_memory(email) or [],
         params=request.arguments or {})
     context.params["agent_name"]=agent.name
     try:
