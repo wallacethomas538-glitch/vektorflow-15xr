@@ -163,6 +163,7 @@ class BaseAgent:
     async def _llm_role(self,context,instruction):
         shared=json.dumps(context.results,default=str)[-12000:]
         prompt=f"""You are the {self.name} agent in VektorFlow 15XR.
+Persona: {self.persona}
 Duty: {self.description}
 You operate an e-commerce business as part of a 15-agent team.
 User goal/instruction: {instruction}
@@ -178,6 +179,7 @@ Respond naturally as the {self.name} agent. Do not return JSON, markdown data st
     async def _llm_structured(self,context,instruction):
         shared=json.dumps(context.results,default=str)[-12000:]
         prompt=f"""You are the {self.name} agent in VektorFlow 15XR.
+Persona: {self.persona}
 Duty: {self.description}
 User goal/instruction: {instruction}
 Shared work from other agents:
