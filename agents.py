@@ -12,7 +12,8 @@ from llm_handler import call_llm, DEFAULT_MODEL
 from store_manager import search_cj_products
 from trend_engine import get_tiktok_trends
 from external_tools import brave_search, tavily_search, apify_actor, webscraping_ai
-from ai_observability import start_span\nfrom agent_personas import AGENT_PERSONAS
+from ai_observability import start_span
+from agent_personas import AGENT_PERSONAS
 
 logger = logging.getLogger("vektorflow")
 
