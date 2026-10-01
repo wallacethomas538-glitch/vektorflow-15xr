@@ -1,13 +1,14 @@
 """Durable runtime bridge for VektorFlow agent events and runs.
 
 Uses the Supabase Postgres connection in DATABASE_URL when configured.
-If the variable is absent or the database is unavailable, callers can continue
-using the in-memory EventBus/SQLite path without breaking local development.
+The shared Postgres helper prefers Supavisor's IPv4 session pooler on Render.
 """
 
 import json
 import os
 from typing import Any, Dict, Optional
+
+from postgres_connection import connect as connect_postgres
 
 
 def _dsn() -> Optional[str]:
@@ -24,8 +25,7 @@ def _connect():
     if not dsn:
         return None
     try:
-        import psycopg
-        return psycopg.connect(dsn, connect_timeout=5)
+        return connect_postgres(dsn, timeout=5)
     except Exception:
         return None
 
