@@ -13,6 +13,14 @@ LLM_GATEWAY_PROVIDER = os.getenv("LLM_GATEWAY_PROVIDER", "openrouter")
 LLM_GATEWAY_MODEL = os.getenv("LLM_GATEWAY_MODEL", "openrouter/free")
 DEFAULT_MODEL = os.getenv("VEKTORFLOW_MODEL", "ollama/qwen2.5:0.5b-instruct")
 
+# Direct provider credentials. Keep these server-side; never put them in Vite/client env.
+OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY", "")
+OPENROUTER_HTTP_REFERER = os.getenv("OPENROUTER_HTTP_REFERER", "")
+OPENROUTER_X_TITLE = os.getenv("OPENROUTER_X_TITLE", "VektorFlow")
+NVIDIA_API_KEY = os.getenv("NVIDIA_API_KEY", "")
+CLOUDFLARE_API_TOKEN = os.getenv("CLOUDFLARE_API_TOKEN", "")
+CLOUDFLARE_ACCOUNT_ID = os.getenv("CLOUDFLARE_ACCOUNT_ID", "")
+
 # Comma-separated Ollama endpoints. The first endpoint is used first, then
 # subsequent endpoints are tried automatically when a request fails.
 DEFAULT_OLLAMA_ENDPOINT = "https://ollama.com/api/generate"
@@ -26,6 +34,10 @@ _ollama_index = 0
 _ollama_index_lock = asyncio.Lock()
 
 PROVIDER_CONFIG = {
+    "openrouter": {
+        "url": "https://openrouter.ai/api/v1/chat/completions",
+        "openai_compatible": True
+    },
     "groq": {
         "url": "https://api.groq.com/openai/v1/chat/completions",
         "openai_compatible": True
@@ -58,6 +70,14 @@ PROVIDER_CONFIG = {
         "url": "https://api-inference.huggingface.co/models/",
         "openai_compatible": False
     },
+    "nvidia": {
+        "url": "https://integrate.api.nvidia.com/v1/chat/completions",
+        "openai_compatible": True
+    },
+    "cloudflare": {
+        "url": "https://api.cloudflare.com/client/v4",
+        "openai_compatible": False
+    },
     "ollama": {
         "url": "https://ollama.com/api/generate",
         "openai_compatible": False
@@ -65,6 +85,8 @@ PROVIDER_CONFIG = {
 }
 
 MODEL_PROVIDER = {
+    "openrouter/free": "openrouter",
+    "openrouter/auto": "openrouter",
     "llama-3.3-70b-versatile": "groq",
     "llama-3.1-8b-instant": "groq",
     "openai/gpt-oss-120b": "groq",
@@ -86,11 +108,32 @@ MODEL_PROVIDER = {
     "ollama/llama3.2": "ollama",
 }
 
+# Provider-prefixed models are resolved without requiring every model to be
+# hard-coded above. Examples: openrouter/meta-llama/..., nvidia/..., etc.
+PROVIDER_PREFIXES = {
+    "openrouter": "openrouter",
+    "groq": "groq",
+    "mistral": "mistral",
+    "deepseek": "deepseek",
+    "cohere": "cohere",
+    "gemini": "gemini",
+    "anthropic": "anthropic",
+    "openai": "openai",
+    "huggingface": "huggingface",
+    "ollama": "ollama",
+    "nvidia": "nvidia",
+    "cloudflare": "cloudflare",
+}
+
+
 async def call_llm(prompt: str, model: str, user_keys: Dict) -> Dict:
     if model.startswith("gateway/"):
         return await call_gateway(prompt, model[len("gateway/"):])
 
     provider = MODEL_PROVIDER.get(model)
+    if not provider:
+        prefix = model.split("/", 1)[0] if "/" in model else ""
+        provider = PROVIDER_PREFIXES.get(prefix)
     if not provider and model.startswith("ollama/"):
         provider = "ollama"
     if not provider:
@@ -102,11 +145,27 @@ async def call_llm(prompt: str, model: str, user_keys: Dict) -> Dict:
     
     if provider == "ollama":
         return await call_ollama(prompt, model)
+    if provider == "cloudflare":
+        return await call_cloudflare(prompt, model)
 
-    api_key = user_keys.get(provider)
+    api_key = (
+        user_keys.get(provider)
+        or {
+            "openrouter": OPENROUTER_API_KEY,
+            "nvidia": NVIDIA_API_KEY,
+        }.get(provider, "")
+    )
     if not api_key:
         return {"success": False, "error": f"No API key for {provider}. Add it in Settings."}
     
+    if provider in {"openrouter", "nvidia"}:
+        return await call_openai_compatible(
+            prompt,
+            api_key,
+            model.split("/", 1)[1] if model.startswith(provider + "/") else model,
+            PROVIDER_CONFIG[provider]["url"],
+            provider,
+        )
     if provider == "groq":
         return await call_groq(prompt, api_key, model)
     elif provider == "deepseek":
@@ -204,6 +263,110 @@ async def call_ollama(prompt: str, model: str) -> Dict:
         "error": "All Ollama endpoints failed: " + " | ".join(errors),
         "provider": "ollama",
     }
+
+
+async def call_openai_compatible(
+    prompt: str,
+    api_key: str,
+    model: str,
+    url: str,
+    provider: str,
+) -> Dict:
+    """Shared OpenAI-compatible transport for cloud model providers."""
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json",
+    }
+    if provider == "openrouter":
+        if OPENROUTER_HTTP_REFERER:
+            headers["HTTP-Referer"] = OPENROUTER_HTTP_REFERER
+        if OPENROUTER_X_TITLE:
+            headers["X-Title"] = OPENROUTER_X_TITLE
+
+    try:
+        async with httpx.AsyncClient(timeout=120.0) as client:
+            response = await client.post(
+                url,
+                headers=headers,
+                json={
+                    "model": model,
+                    "messages": [{"role": "user", "content": prompt}],
+                    "temperature": 0.7,
+                    "max_tokens": 500,
+                    "stream": False,
+                },
+            )
+            if response.status_code >= 400:
+                return {
+                    "success": False,
+                    "error": f"{provider} API error: {response.status_code}: {response.text[:500]}",
+                    "provider": provider,
+                    "model": model,
+                }
+            data = response.json()
+            content = data.get("choices", [{}])[0].get("message", {}).get("content", "")
+            return {
+                "success": True,
+                "response": content,
+                "provider": provider,
+                "model": model,
+            }
+    except Exception as exc:
+        return {
+            "success": False,
+            "error": f"{provider} request failed: {exc}",
+            "provider": provider,
+            "model": model,
+        }
+
+async def call_cloudflare(prompt: str, model: str) -> Dict:
+    """Call Cloudflare Workers AI using an account-scoped AI Run endpoint."""
+    if not CLOUDFLARE_ACCOUNT_ID or not CLOUDFLARE_API_TOKEN:
+        return {
+            "success": False,
+            "error": "CLOUDFLARE_ACCOUNT_ID and CLOUDFLARE_API_TOKEN are required for Cloudflare Workers AI.",
+            "provider": "cloudflare",
+        }
+
+    model_name = model.split("/", 1)[1] if model.startswith("cloudflare/") else model
+    url = (
+        f"https://api.cloudflare.com/client/v4/accounts/"
+        f"{CLOUDFLARE_ACCOUNT_ID}/ai/run/{model_name}"
+    )
+    try:
+        async with httpx.AsyncClient(timeout=120.0) as client:
+            response = await client.post(
+                url,
+                headers={
+                    "Authorization": f"Bearer {CLOUDFLARE_API_TOKEN}",
+                    "Content-Type": "application/json",
+                },
+                json={"messages": [{"role": "user", "content": prompt}]},
+            )
+            if response.status_code >= 400:
+                return {
+                    "success": False,
+                    "error": f"Cloudflare Workers AI error: {response.status_code}: {response.text[:500]}",
+                    "provider": "cloudflare",
+                    "model": model_name,
+                }
+            data = response.json()
+            result = data.get("result", {})
+            content = result.get("response", "") if isinstance(result, dict) else str(result)
+            return {
+                "success": True,
+                "response": content,
+                "provider": "cloudflare",
+                "model": model_name,
+            }
+    except Exception as exc:
+        return {
+            "success": False,
+            "error": f"Cloudflare request failed: {exc}",
+            "provider": "cloudflare",
+            "model": model_name,
+        }
+
 
 async def call_groq(prompt: str, api_key: str, model: str) -> Dict:
     try:
