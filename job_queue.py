@@ -66,11 +66,9 @@ class JobQueue:
             if job.run_at > now:
                 return None
             heappop(self._heap)
-            if job.parent_id:
-                parent = self._jobs.get(job.parent_id)
-                if parent and parent.status != "completed":
-                    heappush(self._heap, job)
-                    return None
+            if not self.is_ready(job.id):
+                heappush(self._heap, job)
+                return None
             job.status = "active"
             job.attempts += 1
             self._emit("active", job)
@@ -100,6 +98,36 @@ class JobQueue:
 
     def pause(self): self.paused = True; self._emit("paused", None)
     def resume(self): self.paused = False; self._emit("resumed", None)
+
+    def chain(self, jobs: List[Dict[str, Any]]) -> List[QueuedJob]:
+        """Enqueue jobs serially using parent completion dependencies."""
+        created = []
+        parent_id = None
+        for spec in jobs:
+            job = self.add(parent_id=parent_id, **spec)
+            created.append(job)
+            parent_id = job.id
+        return created
+
+    def group(self, jobs: List[Dict[str, Any]]) -> List[QueuedJob]:
+        """Enqueue independent jobs for parallel workers."""
+        return [self.add(**spec) for spec in jobs]
+
+    def chord(self, jobs: List[Dict[str, Any]], callback: Dict[str, Any]) -> tuple[List[QueuedJob], QueuedJob]:
+        """Enqueue a parallel group plus a callback dependent on all group jobs."""
+        group_jobs = self.group(jobs)
+        callback_job = self.add(**callback)
+        callback_job.payload = {**callback_job.payload, "wait_for": [job.id for job in group_jobs]}
+        return group_jobs, callback_job
+
+    def is_ready(self, job_id: str) -> bool:
+        job = self._jobs[job_id]
+        if job.parent_id:
+            parent = self._jobs.get(job.parent_id)
+            if parent and parent.status != "completed":
+                return False
+        return all(self._jobs.get(jid) and self._jobs[jid].status == "completed"
+                   for jid in job.payload.get("wait_for", []))
 
     def snapshot(self) -> Dict[str, Any]:
         return {"name": self.name, "paused": self.paused,
