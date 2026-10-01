@@ -3,6 +3,7 @@ from typing import Any, Dict, List, Optional
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
+from mission_planner import build_mission_plan
 from mission_control import (
     MISSION_STATES,
     ALLOWED_TRANSITIONS,
@@ -121,13 +122,24 @@ async def plan_mission(mission_id: str, email: str = "commander@vektorflow.com")
         if mission["state"] == "draft":
             transition_mission(mission_id, "planning", "mission-planner", email)
         existing = list_tasks(mission_id)
+        plan = build_mission_plan(mission["objective"], mission.get("constraints") or {})
         if not existing:
-            from agents import AGENT_ROLES
-            for name, description in AGENT_ROLES:
-                add_task(mission_id, name, f"{mission['objective']} — {description}", [], "medium")
+            task_lookup = {}
+            for spec in plan["tasks"]:
+                deps = [task_lookup[d] for d in spec["dependencies"] if d in task_lookup]
+                created = add_task(mission_id, spec["agent"], spec["instruction"], deps, spec["risk"])
+                task_lookup[spec["id"]] = created["id"]
         if get_mission(mission_id, email)["state"] == "planning":
-            transition_mission(mission_id, "ready", "mission-planner", email, {"task_count": 15})
-        return {"status": "success", "mission": get_mission(mission_id, email), "tasks": list_tasks(mission_id)}
+            transition_mission(
+                mission_id, "ready", "mission-planner", email,
+                {"task_count": plan["task_count"], "planner_version": plan["version"]},
+            )
+        return {
+            "status": "success",
+            "mission": get_mission(mission_id, email),
+            "plan": plan,
+            "tasks": list_tasks(mission_id),
+        }
     except ValueError as exc:
         raise HTTPException(409, str(exc))
 
