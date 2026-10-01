@@ -7,7 +7,22 @@ the Mission Control layer remains the authority over approvals and execution.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Dict, Iterable, List, Set
+from typing import Any, Dict, Iterable, List, Optional, Set
+
+@dataclass
+class ArtifactRef:
+    """Provider-neutral artifact reference for passing outputs between tasks."""
+    name: str
+    uri: str
+    metadata: Dict[str, Any] = field(default_factory=dict)
+
+@dataclass
+class WorkflowTemplate:
+    """Reusable task template inspired by Argo step/template composition."""
+    name: str
+    agent: Optional[str] = None
+    command: Optional[str] = None
+    metadata: Dict[str, Any] = field(default_factory=dict)
 
 
 WORKFLOW_STATES = {"pending", "ready", "running", "waiting", "completed", "failed", "blocked", "cancelled"}
@@ -19,6 +34,11 @@ class WorkflowTask:
     status: str = "pending"
     attempts: int = 0
     max_attempts: int = 3
+    retry_backoff_seconds: float = 1.0
+    template: Optional[str] = None
+    inputs: List[ArtifactRef] = field(default_factory=list)
+    outputs: List[ArtifactRef] = field(default_factory=list)
+    metadata: Dict[str, Any] = field(default_factory=dict)
 
 class WorkflowError(ValueError):
     pass
@@ -91,6 +111,33 @@ class Workflow:
             t for t in self.tasks.values()
             if t.status == "pending" and any(self.tasks[d].status in {"failed", "blocked", "cancelled"} for d in t.dependencies)
         ]
+
+    def chain(self, task_ids: List[str]) -> None:
+        """Wire tasks sequentially, Celery-chain style."""
+        for previous, current in zip(task_ids, task_ids[1:]):
+            if previous not in self.tasks or current not in self.tasks:
+                raise WorkflowError("Unknown task in chain")
+            if previous not in self.tasks[current].dependencies:
+                self.tasks[current].dependencies.append(previous)
+        self._validate()
+
+    def group(self, task_ids: List[str]) -> List[WorkflowTask]:
+        """Return independent tasks eligible for parallel execution."""
+        unknown = [task_id for task_id in task_ids if task_id not in self.tasks]
+        if unknown:
+            raise WorkflowError(f"Unknown tasks in group: {unknown}")
+        return [self.tasks[task_id] for task_id in task_ids]
+
+    def chord(self, task_ids: List[str], callback_id: str) -> None:
+        """Make a callback wait for a group of tasks, Celery-chord style."""
+        if callback_id not in self.tasks:
+            raise WorkflowError(f"Unknown callback task: {callback_id}")
+        for task_id in task_ids:
+            if task_id not in self.tasks:
+                raise WorkflowError(f"Unknown task in chord: {task_id}")
+            if task_id not in self.tasks[callback_id].dependencies:
+                self.tasks[callback_id].dependencies.append(task_id)
+        self._validate()
 
     def snapshot(self) -> Dict[str, object]:
         return {
