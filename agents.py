@@ -12,7 +12,7 @@ from llm_handler import call_llm, DEFAULT_MODEL
 from store_manager import search_cj_products
 from trend_engine import get_tiktok_trends
 from external_tools import brave_search, tavily_search, apify_actor, webscraping_ai
-from ai_observability import start_span
+from ai_observability import start_span\nfrom agent_personas import AGENT_PERSONAS
 
 logger = logging.getLogger("vektorflow")
 
@@ -33,7 +33,7 @@ class AgentContext:
 
 class BaseAgent:
     def __init__(self,name:str,description:str,tools:Optional[List[Dict]]=None,tool_handlers:Optional[Dict[str,Callable]]=None):
-        self.name=name; self.description=description; self.tools=tools or []
+        self.name=name; self.description=description; self.persona=AGENT_PERSONAS.get(name, "You are the " + name + " specialist in VektorFlow 15XR. Stay within your defined duty and be factual."); self.tools=tools or []
         self.tool_handlers=tool_handlers or {}
         self.status=AgentStatus.IDLE; self.result=None
 
@@ -63,7 +63,7 @@ class BaseAgent:
         bus=get_event_bus()
 
         # Consume targeted EventBus handoffs before executing this agent's task.
-        pending_messages=bus.receive_agent_messages(self.name, limit=20)
+        pending_messages=[] if context.params.get("conversation_mode") == "direct" else bus.receive_agent_messages(self.name, limit=20)
         if pending_messages:
             handoffs=[]
             for message in pending_messages:
@@ -159,7 +159,7 @@ class BaseAgent:
             return {"agent":self.name,"error":str(exc),"status":"failed","run_id":run_id}
     async def _execute(self,context,instruction): raise NotImplementedError
     def summary(self):
-        return {"name":self.name,"description":self.description,"status":self.status.value,"tools":[t["name"] for t in self.tools]}
+        return {"name":self.name,"description":self.description,"persona":self.persona,"status":self.status.value,"tools":[t["name"] for t in self.tools]}
     async def _llm_role(self,context,instruction):
         shared=json.dumps(context.results,default=str)[-12000:]
         prompt=f"""You are the {self.name} agent in VektorFlow 15XR.
