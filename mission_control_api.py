@@ -4,6 +4,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
 from mission_planner import build_mission_plan
+from ai_observability import start_span
 from mission_control import (
     MISSION_STATES,
     ALLOWED_TRANSITIONS,
@@ -165,7 +166,8 @@ async def execute_mission(mission_id: str, email: str = "commander@vektorflow.co
             memory=get_all_memory(email) or {},
             params={"mission_id": mission_id, "mission": mission},
         )
-        result = await get_orchestrator().team_execute(mission["objective"], context)
+        with start_span("vektorflow.mission", {"vf.mission_id": mission_id, "vf.workflow_id": mission_id, "vf.objective": mission["objective"]}):
+            result = await get_orchestrator().team_execute(mission["objective"], context)
         transition_mission(mission_id, "completed", "mission-control", email, {"agent_count": 15})
         return {"status": "success", "mission": get_mission(mission_id, email), "result": result}
     except Exception as exc:
