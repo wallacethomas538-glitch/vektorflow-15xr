@@ -10,6 +10,7 @@ from typing import Any, Dict, List, Optional
 
 import httpx
 import psycopg
+from postgres_connection import connect as connect_postgres
 
 
 EMBEDDING_DIMENSIONS = 768
@@ -26,7 +27,7 @@ def _dsn() -> str:
 
 
 def _connect():
-    return psycopg.connect(_dsn(), connect_timeout=8)
+    return connect_postgres(_dsn(), timeout=8)
 
 
 def _vector_literal(values: List[float]) -> str:
