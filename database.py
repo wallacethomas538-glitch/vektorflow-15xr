@@ -301,52 +301,44 @@ def get_conversations(email: str, limit: int = 10) -> List[Dict]:
     return [dict(row) for row in rows]
 
 # ========== MEMORY FUNCTIONS ==========
+# Runtime memory is authoritative in Supabase Postgres. SQLite remains for
+# legacy application tables only; these functions intentionally do not write it.
+from runtime_memory import (
+    save_memory as _save_runtime_memory,
+    get_memory as _get_runtime_memory,
+    get_all_memory as _get_all_runtime_memory,
+    delete_memory as _delete_runtime_memory,
+    clear_all_memory as _clear_all_runtime_memory,
+)
+
 def save_memory(email: str, key: str, value: str):
-    conn = get_db()
-    cursor = conn.cursor()
-    cursor.execute("""
-        INSERT OR REPLACE INTO vektor_memory (email, memory_key, memory_value, updated_at)
-        VALUES (?, ?, ?, CURRENT_TIMESTAMP)
-    """, (email, key, value))
-    conn.commit()
-    conn.close()
+    _save_runtime_memory(email, key, value)
 
 def get_memory(email: str, key: str) -> Optional[str]:
-    """Get a single memory value by key"""
-    conn = get_db()
-    cursor = conn.cursor()
-    cursor.execute("SELECT memory_value FROM vektor_memory WHERE email = ? AND memory_key = ?", (email, key))
-    row = cursor.fetchone()
-    conn.close()
-    return row[0] if row else None
+    return _get_runtime_memory(email, key)
 
 def get_all_memory(email: str) -> List[Dict]:
-    """Get all memories for a user (as list of dicts)"""
-    conn = get_db()
-    cursor = conn.cursor()
-    cursor.execute("SELECT memory_key, memory_value, memory_type, confidence FROM vektor_memory WHERE email = ?", (email,))
-    rows = cursor.fetchall()
-    conn.close()
-    return [dict(row) for row in rows]
+    rows = _get_all_runtime_memory(email)
+    return [
+        {
+            "memory_key": row.get("memory_key"),
+            "memory_value": row.get("memory_value"),
+            "memory_type": "runtime",
+            "confidence": 1.0,
+            "source_agent": row.get("source_agent"),
+            "updated_at": row.get("source_fetched_at"),
+        }
+        for row in rows
+    ]
 
 def get_all_memories(email: str) -> Dict:
-    """Get all memories for a user (as dict) - ALIAS for compatibility"""
-    memories = get_all_memory(email)
-    return {m["memory_key"]: m["memory_value"] for m in memories}
+    return {m["memory_key"]: m["memory_value"] for m in get_all_memory(email)}
 
 def delete_memory(email: str, key: str):
-    conn = get_db()
-    cursor = conn.cursor()
-    cursor.execute("DELETE FROM vektor_memory WHERE email = ? AND memory_key = ?", (email, key))
-    conn.commit()
-    conn.close()
+    _delete_runtime_memory(email, key)
 
 def clear_all_memory(email: str):
-    conn = get_db()
-    cursor = conn.cursor()
-    cursor.execute("DELETE FROM vektor_memory WHERE email = ?", (email,))
-    conn.commit()
-    conn.close()
+    _clear_all_runtime_memory(email)
 
 # ========== TASK FUNCTIONS ==========
 def get_tasks(email: Optional[str] = None) -> List[Dict]:
