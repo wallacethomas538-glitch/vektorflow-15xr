@@ -332,7 +332,7 @@ async def generate_organic_content_endpoint(request: OrganicContentRequest):
 
 @app.get("/api/analytics/metrics")
 async def get_analytics_metrics():
-    from analytics import AnalyticsClient
+    from src.analytics import AnalyticsClient
     analytics = AnalyticsClient()
     analytics.increment_metric("api_calls")
     return JSONResponse(status_code=200, content=analytics.get_metrics())
