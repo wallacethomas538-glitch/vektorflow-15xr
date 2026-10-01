@@ -24,6 +24,34 @@ DEFAULT_AGENT_POLICY = {
 # Explicitly deny host-level execution tools by default.
 DENIED_TOOLS = {"host_shell", "host_exec", "host_filesystem"}
 
+TOOL_RISK = {
+    "search_cj_products": "low", "get_tiktok_trends": "low", "get_google_trends": "low",
+    "read_team_results": "low", "get_stores": "low", "read_memory": "low",
+    "agent_roster": "low", "system_health": "low", "brave_search": "low",
+    "tavily_search": "low", "seo_research": "low", "generate_seo": "low",
+    "generate_content": "low", "check_inventory": "low", "get_inventory_alerts": "low",
+    "apify_actor": "medium", "webscraping_ai": "medium",
+    "generate_campaign": "medium", "generate_outreach": "medium",
+}
+
+HIGH_IMPACT_TERMS = {
+    "delete", "destroy", "drop", "wipe", "rotate_credentials", "change_password",
+    "transfer_funds", "withdraw", "charge", "refund", "payout", "publish",
+    "place_order", "cancel_order",
+}
+CRITICAL_TERMS = {
+    "export_credentials", "expose_secret", "disable_security",
+    "bypass_approval", "impersonate", "grant_admin",
+}
+
+def tool_risk(tool: str, action: str = "") -> str:
+    value=f"{tool} {action}".lower()
+    if any(term in value for term in CRITICAL_TERMS):
+        return "critical"
+    if any(term in value for term in HIGH_IMPACT_TERMS):
+        return "high"
+    return TOOL_RISK.get(tool, "medium")
+
 class PolicyDenied(Exception):
     pass
 
@@ -40,13 +68,14 @@ def _tool_names(agent: str) -> set[str]:
         return set()
 
 def authorize_tool(agent: str, tool: str, *, mission_id: Optional[str]=None,
-                   risk: str="medium", require_approval: bool=False) -> Dict[str, Any]:
+                   risk: Optional[str]=None, require_approval: bool=False) -> Dict[str, Any]:
+    risk = risk or tool_risk(tool)
     if tool in DENIED_TOOLS:
         return {"decision":"reject","allowed":False,"reason":"Host-level execution is prohibited by default."}
     allowed = tool in _tool_names(agent)
     if not allowed:
         return {"decision":"reject","allowed":False,"reason":f"Tool '{tool}' is not assigned to agent '{agent}'."}
-    if require_approval or risk.lower() in {"high","critical"}:
+    if risk.lower() in {"medium","high","critical"} or require_approval:
         return {"decision":"ask","allowed":False,"reason":"Human approval is required before this tool action."}
     return {"decision":"allow","allowed":True,"reason":"Tool is assigned to the agent and passed policy checks."}
 
@@ -91,4 +120,5 @@ def policy_status() -> Dict[str, Any]:
         "allowed_models": os.getenv("VF_ALLOWED_MODELS", "").strip() or "*",
         "host_execution_denied_by_default": True,
         "denied_tools": sorted(DENIED_TOOLS),
+        "tool_risk": dict(TOOL_RISK),
     }
