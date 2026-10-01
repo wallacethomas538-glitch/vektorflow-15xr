@@ -12,6 +12,7 @@ from llm_handler import call_llm, DEFAULT_MODEL
 from store_manager import search_cj_products
 from trend_engine import get_tiktok_trends
 from external_tools import brave_search, tavily_search, apify_actor, webscraping_ai
+from ai_observability import start_span
 
 logger = logging.getLogger("vektorflow")
 
@@ -40,9 +41,18 @@ class BaseAgent:
         handler=self.tool_handlers.get(tool_name)
         if handler is None:
             raise ValueError(f"Tool '{tool_name}' is not available to {self.name}")
-        result=handler(context,**kwargs)
-        if hasattr(result,"__await__"):
-            result=await result
+        with start_span(
+            "vektorflow.tool",
+            {
+                "vf.agent": self.name,
+                "vf.tool": tool_name,
+                "vf.mission_id": context.params.get("mission_id"),
+                "vf.task_id": context.params.get("task_id"),
+            },
+        ):
+            result=handler(context,**kwargs)
+            if hasattr(result,"__await__"):
+                result=await result
         return result
 
     async def run(self,context,instruction):
@@ -85,7 +95,16 @@ class BaseAgent:
             source=self.name,
         )
         try:
-            result=await self._execute(context,instruction)
+            with start_span(
+                "vektorflow.agent.run",
+                {
+                    "vf.agent": self.name,
+                    "vf.run_id": run_id,
+                    "vf.mission_id": context.params.get("mission_id"),
+                    "vf.task_id": context.params.get("task_id"),
+                },
+            ):
+                result=await self._execute(context,instruction)
             self.result=result
             self.status=AgentStatus.COMPLETED
             await bus.publish(
