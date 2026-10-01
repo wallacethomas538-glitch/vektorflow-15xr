@@ -20,6 +20,7 @@ OPENROUTER_X_TITLE = os.getenv("OPENROUTER_X_TITLE", "VektorFlow")
 NVIDIA_API_KEY = os.getenv("NVIDIA_API_KEY", "")
 CLOUDFLARE_API_TOKEN = os.getenv("CLOUDFLARE_API_TOKEN", "")
 CLOUDFLARE_ACCOUNT_ID = os.getenv("CLOUDFLARE_ACCOUNT_ID", "")
+OPENCODE_ZEN_API_KEY = os.getenv("OPENCODE_ZEN_API_KEY", "")
 
 # Comma-separated Ollama endpoints. The first endpoint is used first, then
 # subsequent endpoints are tried automatically when a request fails.
@@ -78,6 +79,10 @@ PROVIDER_CONFIG = {
         "url": "https://api.cloudflare.com/client/v4",
         "openai_compatible": False
     },
+    "opencode": {
+        "url": "https://opencode.ai/zen/v1/chat/completions",
+        "openai_compatible": True
+    },
     "ollama": {
         "url": "https://ollama.com/api/generate",
         "openai_compatible": False
@@ -123,6 +128,7 @@ PROVIDER_PREFIXES = {
     "ollama": "ollama",
     "nvidia": "nvidia",
     "cloudflare": "cloudflare",
+    "opencode": "opencode",
 }
 
 
@@ -153,12 +159,13 @@ async def call_llm(prompt: str, model: str, user_keys: Dict) -> Dict:
         or {
             "openrouter": OPENROUTER_API_KEY,
             "nvidia": NVIDIA_API_KEY,
+            "opencode": OPENCODE_ZEN_API_KEY,
         }.get(provider, "")
     )
     if not api_key:
         return {"success": False, "error": f"No API key for {provider}. Add it in Settings."}
     
-    if provider in {"openrouter", "nvidia"}:
+    if provider in {"openrouter", "nvidia", "opencode"}:
         return await call_openai_compatible(
             prompt,
             api_key,
