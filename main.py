@@ -226,14 +226,13 @@ async def agent_tool(agent_name: str, tool_name: str, request: AgentToolRequest)
     policy=authorize_tool(
         agent.name, tool_name,
         mission_id=mission_id,
-        risk="medium",
         require_approval=bool((request.arguments or {}).get("require_approval", False)),
     )
     if policy["decision"] != "allow":
         from mission_control import propose_action
         proposal=propose_action(
             email=email, agent=agent.name, action=f"tool:{tool_name}",
-            risk="high" if policy["decision"] == "ask" else "critical",
+            risk=policy.get("risk", "medium"),
             mission_id=mission_id, payload={"arguments":request.arguments or {}},
             reason=policy["reason"],
         )
