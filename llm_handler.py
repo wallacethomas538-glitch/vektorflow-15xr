@@ -6,6 +6,7 @@ import os
 import asyncio
 import httpx
 from typing import Dict, Optional, Any
+from ai_observability import start_span
 
 LLM_GATEWAY_URL = os.getenv("LLM_GATEWAY_URL", "").rstrip("/")
 LLM_GATEWAY_API_KEY = os.getenv("LLM_GATEWAY_API_KEY", "")
@@ -132,7 +133,7 @@ PROVIDER_PREFIXES = {
 }
 
 
-async def call_llm(prompt: str, model: str, user_keys: Dict) -> Dict:
+async def _call_llm(prompt: str, model: str, user_keys: Dict) -> Dict:
     if model.startswith("gateway/"):
         return await call_gateway(prompt, model[len("gateway/"):])
 
@@ -191,6 +192,19 @@ async def call_llm(prompt: str, model: str, user_keys: Dict) -> Dict:
         return await call_cohere(prompt, api_key, model)
     else:
         return {"success": False, "error": f"Provider {provider} not configured"}
+
+async def call_llm(prompt: str, model: str, user_keys: Dict) -> Dict:
+    """Trace every model request while preserving the existing provider/failover logic."""
+    with start_span("vektorflow.llm", {"gen_ai.request.model": model} ) as span:
+        result = await _call_llm(prompt, model, user_keys)
+        if isinstance(result, dict):
+            if result.get("provider") is not None:
+                span.set_attribute("gen_ai.system", str(result.get("provider")))
+            if result.get("success") is not None:
+                span.set_attribute("vf.success", bool(result.get("success")))
+            if result.get("model") is not None:
+                span.set_attribute("gen_ai.response.model", str(result.get("model")))
+        return result
 
 async def call_gateway(prompt: str, model: str) -> Dict:
     """Call the shared Free LLM Gateway using its OpenAI-compatible endpoint."""
