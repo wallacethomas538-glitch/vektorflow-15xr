@@ -160,6 +160,51 @@ This keeps the responsibilities separated:
 - OpenTelemetry/Loki provide operational evidence.
 - Postgres remains the authoritative runtime memory path.
 
+## 7. AI observability — Langfuse + Arize Phoenix
+
+Langfuse and Arize Phoenix sit behind the OpenTelemetry boundary rather than inside
+the agents themselves. Langfuse accepts OTLP traces and provides LLM/agent-oriented
+observability; Phoenix accepts OTLP traces for AI tracing, debugging and evaluation.
+This lets VektorFlow emit one trace graph and optionally send it to either or both
+backends. citeturn0search2turn1search0
+
+VektorFlow integration points:
+
+- `ai_observability.py` — provider-neutral OpenTelemetry setup.
+- `vektorflow.llm` — one span around each LLM request.
+- `vektorflow.agent.run` — one span around each agent execution.
+- `vektorflow.tool` — one span around each agent tool execution.
+- `vektorflow.mission` — one span around mission execution.
+- `GET /api/observability` — reports configured backends without exposing credentials.
+
+Configuration is intentionally opt-in:
+
+```
+LANGFUSE_PUBLIC_KEY=
+LANGFUSE_SECRET_KEY=
+LANGFUSE_BASE_URL=https://cloud.langfuse.com
+
+PHOENIX_COLLECTOR_ENDPOINT=
+PHOENIX_API_KEY=
+PHOENIX_PROJECT_NAME=vektorflow-15xr
+
+VF_OTEL_SERVICE_NAME=vektorflow-15xr
+VF_OTEL_SAMPLE_RATIO=1.0
+```
+
+No credentials are stored in source control. If neither provider is configured,
+VektorFlow continues to run with a no-op telemetry path. If both are configured,
+the same OpenTelemetry spans are exported to both.
+
+Trace correlation uses the control-plane fields already established in this
+architecture: mission ID, task ID, workflow ID, agent, and trace ID. This keeps
+Langfuse/Phoenix traces aligned with Mission Control, tool execution, security
+decisions, and Postgres runtime memory.
+
+Langfuse's current documentation recommends its OpenTelemetry-native SDKs for
+Python/JS and also supports direct OTLP ingestion; Phoenix similarly exposes an
+OTLP trace collector. citeturn0search4turn0search2turn1search6
+
 ## Important boundary
 
 These components are complementary, not interchangeable.
