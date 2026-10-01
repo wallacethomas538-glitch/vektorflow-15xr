@@ -52,6 +52,10 @@ class DurableWorkflow:
         self.state = "failed"
         self.record("failed", error=error)
 
+    def wait_for_signal(self, name: str) -> bool:
+        """Temporal-style durable human/external signal gate."""
+        return any(signal.get("name") == name for signal in self.signals)
+
     def checkpoint(self) -> Dict[str, Any]:
         return {"workflow_id": self.workflow_id, "state": self.state,
                 "step": self.step,
@@ -76,10 +80,10 @@ class WorkflowExecutor:
         self.persist(snapshot)
         return snapshot
 
-    def run_step(self, name: str, fn: Callable[[], Any]) -> Any:
+    def run_step(self, name: str, fn: Callable[[], Any], *, idempotency_key: Optional[str] = None) -> Any:
         if self.workflow.state != "running":
             raise RuntimeError(f"Workflow is {self.workflow.state}")
-        self.workflow.record("step_started", name=name)
+        self.workflow.record("step_started", name=name, idempotency_key=idempotency_key)
         self.checkpoint()
         try:
             result = fn()
