@@ -71,13 +71,13 @@ def authorize_tool(agent: str, tool: str, *, mission_id: Optional[str]=None,
                    risk: Optional[str]=None, require_approval: bool=False) -> Dict[str, Any]:
     risk = risk or tool_risk(tool)
     if tool in DENIED_TOOLS:
-        return {"decision":"reject","allowed":False,"reason":"Host-level execution is prohibited by default."}
+        return {"decision":"reject","allowed":False,"risk":risk,"reason":"Host-level execution is prohibited by default."}
     allowed = tool in _tool_names(agent)
     if not allowed:
-        return {"decision":"reject","allowed":False,"reason":f"Tool '{tool}' is not assigned to agent '{agent}'."}
+        return {"decision":"reject","allowed":False,"risk":risk,"reason":f"Tool '{tool}' is not assigned to agent '{agent}'."}
     if risk.lower() in {"medium","high","critical"} or require_approval:
-        return {"decision":"ask","allowed":False,"reason":"Human approval is required before this tool action."}
-    return {"decision":"allow","allowed":True,"reason":"Tool is assigned to the agent and passed policy checks."}
+        return {"decision":"ask","allowed":False,"risk":risk,"reason":"Human approval is required before this tool action."}
+    return {"decision":"allow","allowed":True,"risk":risk,"reason":"Tool is assigned to the agent and passed policy checks."}
 
 def authorize_model(agent: str, model: str, *, mission_id: Optional[str]=None) -> Dict[str, Any]:
     allowed = os.getenv("VF_ALLOWED_MODELS", "").strip()
