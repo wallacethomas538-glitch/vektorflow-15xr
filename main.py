@@ -21,10 +21,12 @@ from inventory import check_inventory, get_inventory_alerts, get_reorder_recomme
 from campaign import generate_campaign
 from organic_content import generate_organic_content
 from mission_control_api import router as mission_control_router
+from memory_api import router as memory_router
 
 app = FastAPI(title="VektorFlow 15xr", version="1.1")
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
 app.include_router(mission_control_router)
+app.include_router(memory_router)
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("vektorflow")
 ADMIN_API_KEY = os.environ.get("ADMIN_API_KEY", "")
