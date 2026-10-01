@@ -240,7 +240,7 @@ async def agent_specific_chat(agent_name: str, request: AgentChatRequest):
         email=request.email or "commander@vektorflow.com"
         context=AgentContext(email=email,user=get_user(email) or {},stores=get_user_stores(email) or [],
             llm_keys=get_llm_keys(email) or {},icp=get_icp_data(email) or {},memory=get_all_memory(email) or {},
-            params=request.params or {},conversation_history=request.conversation_history or [])
+            params={**(request.params or {}), "conversation_mode": "direct", "agent_name": agent.name},conversation_history=request.conversation_history or [])
         result=await agent.run(context,request.message)
         if isinstance(result, dict) and result.get("status") == "failed":
             raise HTTPException(status_code=502, detail=result.get("error", "Agent execution failed"))
