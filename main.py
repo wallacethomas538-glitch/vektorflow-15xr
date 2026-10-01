@@ -329,6 +329,14 @@ async def generate_organic_content_endpoint(request: OrganicContentRequest):
     return {"status":"success" if result.get("success") else "error","content":result.get("content",{}),"content_id":result.get("content_id"),"task_id":result.get("task_id"),"timestamp":datetime.utcnow().isoformat()}
 
 
+
+@app.get("/api/analytics/metrics")
+async def get_analytics_metrics():
+    from analytics import AnalyticsClient
+    analytics = AnalyticsClient()
+    analytics.increment_metric("api_calls")
+    return JSONResponse(status_code=200, content=analytics.get_metrics())
+
 @app.get("/api/observability")
 async def observability():
     """Report configured AI observability backends without exposing credentials."""
