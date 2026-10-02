@@ -83,7 +83,7 @@ def recent_termux_jobs(limit: int = 10) -> list[dict[str, Any]]:
         with conn.cursor() as cur:
             cur.execute(
                 """SELECT id, target, action, status, created_at, started_at,
-                          completed_at, error
+                          completed_at, stderr
                    FROM public.termux_jobs
                    ORDER BY created_at DESC LIMIT %s""",
                 (limit,),
