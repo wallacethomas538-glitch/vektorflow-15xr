@@ -12,7 +12,7 @@ from vektor_agent import vektor_chat, detect_intent
 from llm_handler import call_llm, DEFAULT_MODEL
 from store_manager import search_cj_products, get_cj_product_details, connect_store
 from trend_engine import get_tiktok_trends
-from agents import run_agent_task, get_orchestrator, get_ad_specialist
+from vektorflow_agents import run_agent_task, get_orchestrator, get_ad_specialist
 from auth import verify_token, create_token
 from middleware import APIKeyMiddleware
 from seo_optimizer import optimize_seo
@@ -214,7 +214,7 @@ async def get_agent(agent_name: str):
 
 @app.post("/api/agents/{agent_name}/tools/{tool_name}")
 async def agent_tool(agent_name: str, tool_name: str, request: AgentToolRequest):
-    from agents import AgentContext
+    from vektorflow_agents import AgentContext
     agent = get_orchestrator().get_agent(agent_name)
     if not agent:
         raise HTTPException(status_code=404, detail="Agent not found")
@@ -234,7 +234,7 @@ async def agent_tool(agent_name: str, tool_name: str, request: AgentToolRequest)
 
 @app.post("/api/agents/{agent_name}/chat")
 async def agent_specific_chat(agent_name: str, request: AgentChatRequest):
-    from agents import AgentContext
+    from vektorflow_agents import AgentContext
     agent = get_orchestrator().get_agent(agent_name)
     if not agent:
         raise HTTPException(status_code=404, detail="Agent not found")
@@ -252,7 +252,7 @@ async def agent_specific_chat(agent_name: str, request: AgentChatRequest):
         raise HTTPException(status_code=500,detail=str(e))
 @app.post("/api/agents/run")
 async def run_team(request: TeamRunRequest):
-    from agents import AgentContext
+    from vektorflow_agents import AgentContext
     try:
         email=request.email
         context=AgentContext(email=email,user=get_user(email) or {},stores=get_user_stores(email) or [],
@@ -353,7 +353,7 @@ async def list_external_tools():
 async def api_info():
     return {
         "service":"VektorFlow 15xr","version":"1.1","status":"operational","agent_count":15,
-        "agent_roster":[{"name":n,"description":d} for n,d in __import__("agents").AGENT_ROLES],
+        "agent_roster":[{"name":n,"description":d} for n,d in __import__("vektorflow_agents").AGENT_ROLES],
         "features":{"agent":"15-agent cooperative orchestrator","seo":"SEO optimization","store":"Store auto-connect","outreach":"Outreach generator","inventory":"Inventory monitoring","campaign":"Campaign generator","organic_content":"Organic content generator"},
         "endpoints":{"login":"/commander/login","agent_chat":"/api/agent/chat","agent_command":"/api/agent/command","agents":"/api/agents","agent_detail":"/api/agents/{agent_name}","agent_chat":"/api/agents/{agent_name}/chat","team_run":"/api/agents/run","ai_chat":"/api/ai/chat","search_products":"/api/products/search","trends":"/api/trends","store_connect":"/api/store/connect","tasks":"/api/tasks","optimize_seo":"/optimize-seo","outreach":"/api/outreach/generate","inventory_check":"/api/inventory/check","inventory_alerts":"/api/inventory/alerts","inventory_reorder":"/api/inventory/reorder","campaign":"/api/campaign/generate","organic_content":"/api/content/organic"},
         "timestamp":datetime.utcnow().isoformat()
