@@ -12,7 +12,7 @@ from second_brain import run_second_brain
 from postgres_connection import connect as connect_postgres
 
 router = APIRouter(prefix="/api/second-brain", tags=["second-brain"])
-RELAY_TOKEN = os.getenv("TERMUX_RELAY_TOKEN", "").strip()
+RELAY_TOKEN = os.getenv("TERMUX_RELAY_TOKEN", "").strip()\nADMIN_API_KEY = os.getenv("ADMIN_API_KEY", "").strip()
 
 class SecondBrainRequest(BaseModel):
     message: str = Field(min_length=1, max_length=12000)
@@ -134,7 +134,9 @@ async def relay_job_result(payload: RelayJobUpdate, x_termux_relay_token: Option
     return {"status": "ok", "job_id": payload.job_id}
 
 @router.post("/relay/jobs/{job_id}/approve")
-async def approve_job(job_id: str):
+async def approve_job(job_id: str, x_admin_api_key: Optional[str] = Header(None)):
+    if not ADMIN_API_KEY or x_admin_api_key != ADMIN_API_KEY:
+        raise HTTPException(status_code=401, detail="Admin API key required")
     with _connect() as conn:
         with conn.cursor() as cur:
             cur.execute(
