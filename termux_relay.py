@@ -24,12 +24,21 @@ POLL_SECONDS = max(2, int(os.getenv("TERMUX_POLL_SECONDS", "5")))
 RELAY_ID = os.getenv("TERMUX_RELAY_ID", f"termux-{uuid.uuid4().hex[:10]}")
 ROOT = os.path.expanduser(os.getenv("VEKTORFLOW_REPO_DIR", "~/vektorflow-15xr"))
 
-EXECUTORS = {"hermes": ["hermes"], "codex": ["codex"], "opencode": ["opencode"]}
+def build_command(target: str, instruction: str, edit_requested: bool):
+    if target == "hermes":
+        return ["hermes", "chat", "-q", instruction, "--format", "stream-json"]
+    if target == "codex":
+        return ["codex", "exec"] + (["--full-auto"] if edit_requested else []) + [instruction]
+    if target == "opencode":
+        return ["opencode", "run"] + (["--auto"] if edit_requested else []) + [instruction]
+    raise ValueError(f"Unsupported executor: {target}")
+
+EXECUTORS = {"hermes": "hermes", "codex": "codex", "opencode": "opencode"}
 
 session = requests.Session()
 session.headers.update({"X-Termux-Relay-Token": TOKEN})
 
-def run_executor(target: str, instruction: str, working_dir: str, timeout: int):
+def run_executor(target: str, instruction: str, working_dir: str, timeout: int, action: str = ""):
     if target not in EXECUTORS:
         raise ValueError(f"Unsupported executor: {target}")
     cwd = os.path.expanduser(working_dir or ROOT)
@@ -72,7 +81,7 @@ def main():
                 try:
                     code, stdout, stderr = run_executor(
                         job["target"], job["instruction"], job.get("working_dir") or ROOT,
-                        int(job.get("timeout_seconds") or 300),
+                        int(job.get("timeout_seconds") or 300), job.get("action") or "",
                     )
                     report(job["id"], "completed" if code == 0 else "failed",
                            stdout, stderr, code, {"target": job["target"], "action": job["action"]})
