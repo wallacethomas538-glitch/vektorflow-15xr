@@ -236,6 +236,7 @@ async def _call_llm(prompt: str, model: str, user_keys: Dict) -> Dict:
         user_keys.get(provider)
         or {
             "openrouter": OPENROUTER_API_KEY,
+            "groq": os.getenv("GROQ_API_KEY", ""),
             "nvidia": NVIDIA_API_KEY,
             "opencode": OPENCODE_ZEN_API_KEY,
             "xai": XAI_API_KEY,
@@ -504,7 +505,7 @@ async def call_groq(prompt: str, api_key: str, model: str) -> Dict:
                 return {"success": True, "response": content}
             return {"success": False, "error": f"Groq API error: {response.status_code}"}
     except Exception as e:
-        return {"success": False, "error": f"Groq request failed: {str(e)}"}
+        return {"success": False, "error": f"Groq request failed: {str(e)}", "provider": "groq", "model": model}
 
 async def call_deepseek(prompt: str, api_key: str, model: str) -> Dict:
     try:
