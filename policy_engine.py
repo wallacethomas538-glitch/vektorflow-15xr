@@ -33,7 +33,7 @@ _tokens = defaultdict(list)
 
 def _tool_names(agent: str) -> set[str]:
     try:
-        from agents import get_orchestrator
+        from vektorflow_agents import get_orchestrator
         a = get_orchestrator().get_agent(agent)
         return {str(t.get("name")) for t in (a.tools if a else [])}
     except Exception:
