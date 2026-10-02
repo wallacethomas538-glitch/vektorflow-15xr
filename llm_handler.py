@@ -502,8 +502,8 @@ async def call_groq(prompt: str, api_key: str, model: str) -> Dict:
             if response.status_code == 200:
                 data = response.json()
                 content = data.get("choices", [{}])[0].get("message", {}).get("content", "")
-                return {"success": True, "response": content}
-            return {"success": False, "error": f"Groq API error: {response.status_code}"}
+                return {"success": True, "response": content, "provider": "groq", "model": model}
+            return {"success": False, "error": f"Groq API error: {response.status_code}", "provider": "groq", "model": model}
     except Exception as e:
         return {"success": False, "error": f"Groq request failed: {str(e)}", "provider": "groq", "model": model}
 
