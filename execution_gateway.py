@@ -15,7 +15,7 @@ from typing import Any, Dict, Set
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect, HTTPException
 from pydantic import BaseModel, Field
 
-from agents import AgentContext, get_orchestrator
+from vektorflow_agents import AgentContext, get_orchestrator
 from database import get_user, get_user_stores, get_llm_keys, get_icp_data, get_all_memory
 from mission_control import propose_action, get_action_proposal
 from src.event_bus import get_event_bus
