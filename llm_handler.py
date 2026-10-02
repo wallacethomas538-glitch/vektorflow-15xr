@@ -12,7 +12,8 @@ LLM_GATEWAY_URL = os.getenv("LLM_GATEWAY_URL", "").rstrip("/")
 LLM_GATEWAY_API_KEY = os.getenv("LLM_GATEWAY_API_KEY", "")
 LLM_GATEWAY_PROVIDER = os.getenv("LLM_GATEWAY_PROVIDER", "openrouter")
 LLM_GATEWAY_MODEL = os.getenv("LLM_GATEWAY_MODEL", "openrouter/free")
-DEFAULT_MODEL = os.getenv("VEKTORFLOW_MODEL", "ollama/qwen2.5:0.5b-instruct")
+# Prefer the shared gateway when it is fully configured; otherwise use the free OpenRouter router.
+DEFAULT_MODEL = os.getenv("VEKTORFLOW_MODEL") or (f"gateway/{LLM_GATEWAY_MODEL}" if LLM_GATEWAY_URL and LLM_GATEWAY_API_KEY else "openrouter/free")
 
 # Direct provider credentials. Keep these server-side; never put them in Vite/client env.
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY", "")
@@ -197,6 +198,11 @@ async def call_llm(prompt: str, model: str, user_keys: Dict) -> Dict:
     """Trace every model request while preserving the existing provider/failover logic."""
     with start_span("vektorflow.llm", {"gen_ai.request.model": model} ) as span:
         result = await _call_llm(prompt, model, user_keys)
+        # If the shared gateway is unavailable, fail over to direct free OpenRouter.
+        if isinstance(result, dict) and not result.get("success") and model.startswith("gateway/"):
+            fallback = await _call_llm(prompt, "openrouter/free", user_keys)
+            if fallback.get("success"):
+                result = fallback
         if isinstance(result, dict):
             if result.get("provider") is not None:
                 span.set_attribute("gen_ai.system", str(result.get("provider")))
