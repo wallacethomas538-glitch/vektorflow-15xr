@@ -12,7 +12,8 @@ from second_brain import run_second_brain
 from postgres_connection import connect as connect_postgres
 
 router = APIRouter(prefix="/api/second-brain", tags=["second-brain"])
-RELAY_TOKEN = os.getenv("TERMUX_RELAY_TOKEN", "").strip()\nADMIN_API_KEY = os.getenv("ADMIN_API_KEY", "").strip()
+RELAY_TOKEN = os.getenv("TERMUX_RELAY_TOKEN", "").strip()
+ADMIN_API_KEY = os.getenv("ADMIN_API_KEY", "").strip()
 
 class SecondBrainRequest(BaseModel):
     message: str = Field(min_length=1, max_length=12000)
