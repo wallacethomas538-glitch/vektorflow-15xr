@@ -1,4 +1,4 @@
-"""
+""" 
 Universal LLM Handler - Supports all providers
 """
 
@@ -23,6 +23,7 @@ NVIDIA_API_KEY = os.getenv("NVIDIA_API_KEY", "")
 CLOUDFLARE_API_TOKEN = os.getenv("CLOUDFLARE_API_TOKEN", "")
 CLOUDFLARE_ACCOUNT_ID = os.getenv("CLOUDFLARE_ACCOUNT_ID", "")
 OPENCODE_ZEN_API_KEY = os.getenv("OPENCODE_ZEN_API_KEY", "")
+XAI_API_KEY = os.getenv("XAI_API_KEY", "")
 
 # Comma-separated Ollama endpoints. The first endpoint is used first, then
 # subsequent endpoints are tried automatically when a request fails.
@@ -85,6 +86,10 @@ PROVIDER_CONFIG = {
         "url": "https://opencode.ai/zen/v1/chat/completions",
         "openai_compatible": True
     },
+    "xai": {
+        "url": "https://api.x.ai/v1/chat/completions",
+        "openai_compatible": True
+    },
     "ollama": {
         "url": "https://ollama.com/api/generate",
         "openai_compatible": False
@@ -112,6 +117,8 @@ MODEL_PROVIDER = {
     "gpt-4o-mini": "openai",
     "meta-llama/Llama-3.2-1B-Instruct": "huggingface",
     "meta-llama/Meta-Llama-3-70B-Instruct": "huggingface",
+    "grok-4.7": "xai",
+    "grok-4.6": "xai",
     "ollama/llama3.2": "ollama",
 }
 
@@ -131,6 +138,8 @@ PROVIDER_PREFIXES = {
     "nvidia": "nvidia",
     "cloudflare": "cloudflare",
     "opencode": "opencode",
+    "xai": "xai",
+    "grok": "xai",
 }
 
 
@@ -162,12 +171,13 @@ async def _call_llm(prompt: str, model: str, user_keys: Dict) -> Dict:
             "openrouter": OPENROUTER_API_KEY,
             "nvidia": NVIDIA_API_KEY,
             "opencode": OPENCODE_ZEN_API_KEY,
+            "xai": XAI_API_KEY,
         }.get(provider, "")
     )
     if not api_key:
         return {"success": False, "error": f"No API key for {provider}. Add it in Settings."}
     
-    if provider in {"openrouter", "nvidia", "opencode"}:
+    if provider in {"openrouter", "nvidia", "opencode", "xai"}:
         return await call_openai_compatible(
             prompt,
             api_key,
@@ -196,7 +206,7 @@ async def _call_llm(prompt: str, model: str, user_keys: Dict) -> Dict:
 
 async def call_llm(prompt: str, model: str, user_keys: Dict) -> Dict:
     """Trace every model request while preserving the existing provider/failover logic."""
-    with start_span("vektorflow.llm", {"gen_ai.request.model": model} ) as span:
+    with start_span("vektorflow.llm", {"gen_ai.request.model": model}) as span:
         result = await _call_llm(prompt, model, user_keys)
         # If the shared gateway is unavailable, fail over to direct free OpenRouter.
         if isinstance(result, dict) and not result.get("success") and model.startswith("gateway/"):
@@ -393,7 +403,6 @@ async def call_cloudflare(prompt: str, model: str) -> Dict:
             "provider": "cloudflare",
             "model": model_name,
         }
-
 
 async def call_groq(prompt: str, api_key: str, model: str) -> Dict:
     try:
