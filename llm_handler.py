@@ -24,6 +24,17 @@ CLOUDFLARE_API_TOKEN = os.getenv("CLOUDFLARE_API_TOKEN", "")
 CLOUDFLARE_ACCOUNT_ID = os.getenv("CLOUDFLARE_ACCOUNT_ID", "")
 OPENCODE_ZEN_API_KEY = os.getenv("OPENCODE_ZEN_API_KEY", "")
 XAI_API_KEY = os.getenv("XAI_API_KEY", "")
+HF_TOKEN = os.getenv("HF_TOKEN", "")
+CEREBRAS_API_KEY = os.getenv("CEREBRAS_API_KEY", "")
+DEEPINFRA_API_KEY = os.getenv("DEEPINFRA_API_KEY", "")
+TOGETHER_API_KEY = os.getenv("TOGETHER_API_KEY", "")
+FIREWORKS_API_KEY = os.getenv("FIREWORKS_API_KEY", "")
+FEATHERLESS_API_KEY = os.getenv("FEATHERLESS_API_KEY", "")
+NOVITA_API_KEY = os.getenv("NOVITA_API_KEY", "")
+NSCALE_API_KEY = os.getenv("NSCALE_API_KEY", "")
+SCALEWAY_API_KEY = os.getenv("SCALEWAY_API_KEY", "")
+ZAI_API_KEY = os.getenv("ZAI_API_KEY", "")
+BASETEN_API_KEY = os.getenv("BASETEN_API_KEY", "")
 
 # Comma-separated Ollama endpoints. The first endpoint is used first, then
 # subsequent endpoints are tried automatically when a request fails.
@@ -90,6 +101,52 @@ PROVIDER_CONFIG = {
         "url": "https://api.x.ai/v1/chat/completions",
         "openai_compatible": True
     },
+    # OpenAI-compatible open-model inference endpoints. Credentials are optional;
+    # a provider is simply skipped until its corresponding Render secret exists.
+    "huggingface": {
+        "url": "https://router.huggingface.co/v1/chat/completions",
+        "openai_compatible": True
+    },
+    "cerebras": {
+        "url": "https://api.cerebras.ai/v1/chat/completions",
+        "openai_compatible": True
+    },
+    "deepinfra": {
+        "url": "https://api.deepinfra.com/v1/openai/chat/completions",
+        "openai_compatible": True
+    },
+    "together": {
+        "url": "https://api.together.xyz/v1/chat/completions",
+        "openai_compatible": True
+    },
+    "fireworks": {
+        "url": "https://api.fireworks.ai/inference/v1/chat/completions",
+        "openai_compatible": True
+    },
+    "featherless": {
+        "url": "https://api.featherless.ai/v1/chat/completions",
+        "openai_compatible": True
+    },
+    "novita": {
+        "url": "https://api.novita.ai/openai/v1/chat/completions",
+        "openai_compatible": True
+    },
+    "nscale": {
+        "url": "https://inference.api.nscale.com/v1/chat/completions",
+        "openai_compatible": True
+    },
+    "scaleway": {
+        "url": "https://api.scaleway.ai/v1/chat/completions",
+        "openai_compatible": True
+    },
+    "zai": {
+        "url": "https://api.z.ai/api/paas/v4/chat/completions",
+        "openai_compatible": True
+    },
+    "baseten": {
+        "url": "https://inference.baseten.co/v1/chat/completions",
+        "openai_compatible": True
+    },
     "ollama": {
         "url": "https://ollama.com/api/generate",
         "openai_compatible": False
@@ -140,6 +197,16 @@ PROVIDER_PREFIXES = {
     "opencode": "opencode",
     "xai": "xai",
     "grok": "xai",
+    "cerebras": "cerebras",
+    "deepinfra": "deepinfra",
+    "together": "together",
+    "fireworks": "fireworks",
+    "featherless": "featherless",
+    "novita": "novita",
+    "nscale": "nscale",
+    "scaleway": "scaleway",
+    "zai": "zai",
+    "baseten": "baseten",
 }
 
 
@@ -172,12 +239,27 @@ async def _call_llm(prompt: str, model: str, user_keys: Dict) -> Dict:
             "nvidia": NVIDIA_API_KEY,
             "opencode": OPENCODE_ZEN_API_KEY,
             "xai": XAI_API_KEY,
+            "huggingface": HF_TOKEN,
+            "cerebras": CEREBRAS_API_KEY,
+            "deepinfra": DEEPINFRA_API_KEY,
+            "together": TOGETHER_API_KEY,
+            "fireworks": FIREWORKS_API_KEY,
+            "featherless": FEATHERLESS_API_KEY,
+            "novita": NOVITA_API_KEY,
+            "nscale": NSCALE_API_KEY,
+            "scaleway": SCALEWAY_API_KEY,
+            "zai": ZAI_API_KEY,
+            "baseten": BASETEN_API_KEY,
         }.get(provider, "")
     )
     if not api_key:
         return {"success": False, "error": f"No API key for {provider}. Add it in Settings."}
     
-    if provider in {"openrouter", "nvidia", "opencode", "xai"}:
+    if provider in {
+        "openrouter", "nvidia", "opencode", "xai", "huggingface", "cerebras",
+        "deepinfra", "together", "fireworks", "featherless", "novita", "nscale",
+        "scaleway", "zai", "baseten"
+    }:
         return await call_openai_compatible(
             prompt,
             api_key,
@@ -192,7 +274,11 @@ async def _call_llm(prompt: str, model: str, user_keys: Dict) -> Dict:
     elif provider == "gemini":
         return await call_gemini(prompt, api_key, model)
     elif provider == "huggingface":
-        return await call_huggingface(prompt, api_key, model)
+        return await call_openai_compatible(
+            prompt, api_key,
+            model.split("/", 1)[1] if model.startswith("huggingface/") else model,
+            PROVIDER_CONFIG["huggingface"]["url"], "huggingface"
+        )
     elif provider == "openai":
         return await call_openai(prompt, api_key, model)
     elif provider == "anthropic":
