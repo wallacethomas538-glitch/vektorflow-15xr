@@ -17,3 +17,5 @@ mcp>=2.0.0,<3.0.0
 opentelemetry-api
 opentelemetry-sdk
 opentelemetry-exporter-otlp-proto-http
+
+openai-agents

@@ -17,6 +17,10 @@ services:
         sync: false
       - key: OPENAI_API_KEY
         sync: false
+      - key: SECOND_BRAIN_MODEL
+        value: gpt-5.4
+      - key: TERMUX_RELAY_TOKEN
+        sync: false
       - key: CJ_API_KEY
         sync: false
       - key: CJ_API_SECRET
