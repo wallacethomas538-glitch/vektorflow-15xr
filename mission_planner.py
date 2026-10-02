@@ -8,7 +8,7 @@ from __future__ import annotations
 from typing import Any, Dict, List
 
 try:
-    from agents import AGENT_ROLES
+    from vektorflow_agents import AGENT_ROLES
 except Exception:
     AGENT_ROLES = []
 
