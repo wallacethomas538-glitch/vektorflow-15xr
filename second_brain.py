@@ -18,7 +18,7 @@ from postgres_connection import connect as connect_postgres
 DEFAULT_EMAIL = "commander@vektorflow.com"
 MODEL = os.getenv("SECOND_BRAIN_MODEL", "gpt-5.4")
 MAX_TIMEOUT = 900
-ALLOWED_TARGETS = {"hermes", "codex", "opencode", "shell"}
+ALLOWED_TARGETS = {"hermes", "codex", "opencode"}
 
 SECOND_BRAIN_INSTRUCTIONS = """You are the VektorFlow Second Brain.
 
@@ -99,7 +99,7 @@ def queue_termux_job(
     timeout_seconds: int = 300,
     approval_required: bool = True,
 ) -> dict[str, Any]:
-    """Queue a bounded job for Hermes, Codex, OpenCode, or a shell health check.
+    """Queue a bounded job for Hermes, Codex, or OpenCode.
 
     The Termux relay performs the actual local execution. This function never runs a
     command on the server.
@@ -111,6 +111,13 @@ def queue_termux_job(
     if not instruction:
         raise ValueError("instruction must not be empty")
     timeout_seconds = max(10, min(int(timeout_seconds), MAX_TIMEOUT))
+    risk_text = f"{action} {instruction}".lower()
+    destructive = any(
+        word in risk_text
+        for word in ("delete", "drop ", "destroy", "force-push", "rotate credential",
+                     "revoke", "production deploy", "prod deploy", "wipe ")
+    )
+    approval_required = bool(approval_required or destructive)
     job_id = str(uuid.uuid4())
 
     with _connect() as conn:
