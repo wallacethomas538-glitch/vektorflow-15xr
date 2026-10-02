@@ -155,7 +155,7 @@ async def execute_mission(mission_id: str, email: str = "commander@vektorflow.co
         raise HTTPException(409, f"Mission must be ready or approved; current state is {mission['state']}")
     try:
         transition_mission(mission_id, "executing", "mission-control", email)
-        from agents import AgentContext, get_orchestrator
+        from vektorflow_agents import AgentContext, get_orchestrator
         from database import get_user, get_user_stores, get_llm_keys, get_icp_data, get_all_memory
         context = AgentContext(
             email=email,
