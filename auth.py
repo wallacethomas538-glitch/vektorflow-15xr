@@ -12,7 +12,9 @@ from typing import Optional, Dict, Any
 from fastapi import HTTPException, status
 
 # ============ CONFIGURATION ============
-SECRET_KEY = os.environ.get("JWT_SECRET_KEY", "vektorflow-15xr-super-secret-key-2026")
+SECRET_KEY = os.environ.get("JWT_SECRET_KEY")
+if not SECRET_KEY:
+    raise RuntimeError("JWT_SECRET_KEY environment variable is required; refusing to start with a hard-coded fallback.")
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24 * 7  # 7 days
 
