@@ -174,7 +174,7 @@ Business context: {json.dumps(context.params,default=str)}
 Conversation with this agent:
 {json.dumps(context.conversation_history[-12:],default=str)}
 Respond naturally as the {self.name} agent. Do not return JSON, markdown data structures, status objects, tool metadata, or empty placeholders. Speak directly to the user like a real business specialist. Give concrete reasoning, findings, and next actions when the available evidence supports them. Be honest when required data is not available. Never claim an external action was completed unless the connected integration actually performed it."""
-        result=await call_llm(prompt,DEFAULT_MODEL,context.llm_keys)
+        result=await call_llm(prompt,DEFAULT_MODEL,context.llm_keys,context.params.get("temperature"))
         return result.get("response","I am ready to help, but I do not have enough information to answer that yet.").strip()
 
     async def _llm_structured(self,context,instruction):
@@ -188,7 +188,7 @@ Shared work from other agents:
 Business context: {json.dumps(context.params,default=str)}
 Return concise JSON with keys: status, message, actions, handoff, evidence. The message must be a natural response from the agent, not JSON or tool metadata. Never return an empty message when the assigned duty can be performed from the supplied context.
 Never claim an external action was completed unless the connected integration actually performed it."""
-        result=await call_llm(prompt,DEFAULT_MODEL,context.llm_keys)
+        result=await call_llm(prompt,DEFAULT_MODEL,context.llm_keys,context.params.get("temperature"))
         text=result.get("response","")
         try:
             match=re.search(r"\{.*\}",text,re.DOTALL)
@@ -382,10 +382,14 @@ class Orchestrator:
     def register_agent(self,agent): self.agents[agent.name.lower()]=agent
     def get_agent(self,name): return self.agents.get(name.lower())
     def roster(self): return [a.summary() for a in self.agents.values()]
-    async def team_execute(self,goal,context):
+    async def team_execute(self,goal,context,cancel_event=None):
         order=[name.lower() for name,_ in AGENT_ROLES]
         results={}
+        completed=[]
+        cancelled=False
         for name in order:
+            if cancel_event is not None and cancel_event.is_set():
+                cancelled=True; break
             agent=self.agents[name]
             role_description=agent.description
             instruction=(f"{goal}\n\nYour assigned duty is: {role_description}\n"
@@ -395,10 +399,16 @@ class Orchestrator:
                 instruction=(f"{goal}\n\nYou are the final Oracle synthesizer. Review ALL evidence produced by the other agents in context.results. "
                              f"Identify the strongest-supported opportunities, explain the evidence from each relevant agent, "
                              f"surface missing evidence/uncertainty, and provide explicit next actions. Do not invent data.")
-            result=await agent.run(context,instruction)
+            try:
+                result=await agent.run(context,instruction)
+            except asyncio.CancelledError:
+                cancelled=True; break
             results[name]=result; context.results[name]=result
+            completed.append(name)
             save_memory(context.email,f"agent_{name}_result",json.dumps(result,default=str))
-        return {"status":"completed","goal":goal,"agent_count":15,"results":results,"roster":self.roster()}
+        status="cancelled" if cancelled else "completed"
+        return {"status":status,"goal":goal,"agent_count":len(results),"results":results,"roster":self.roster(),
+                "completed_agents":completed,"cancelled":cancelled}
     async def plan_and_execute(self,goal,context):
         descriptions="\n".join(f"- {name}: {desc}" for name,desc in AGENT_ROLES)
         prompt=f"""You are the VektorFlow 15XR orchestrator.
@@ -408,7 +418,7 @@ Goal: {goal}
 Shared context: {json.dumps(context.params,default=str)}
 Create JSON {{"tasks":[{{"agent":"name","instruction":"..."}}]}} using only the canonical 15 names."""
         try:
-            response=await call_llm(prompt,DEFAULT_MODEL,context.llm_keys)
+            response=await call_llm(prompt,DEFAULT_MODEL,context.llm_keys,context.params.get("temperature"))
             text=response.get("response","{}"); match=re.search(r"\{.*\}",text,re.DOTALL)
             plan=json.loads(match.group(0) if match else text)
         except Exception:
