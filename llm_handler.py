@@ -261,10 +261,16 @@ async def _call_llm(prompt: str, model: str, user_keys: Dict) -> Dict:
         "deepinfra", "together", "fireworks", "featherless", "novita", "nscale",
         "scaleway", "zai", "baseten"
     }:
+        # OpenRouter catalog IDs already include the author prefix (e.g. "openrouter/auto").
+        # Stripping it yields a bare ID ("auto") that OpenRouter rejects, so keep it intact.
+        if provider == "openrouter":
+            model_id = model
+        else:
+            model_id = model.split("/", 1)[1] if model.startswith(provider + "/") else model
         return await call_openai_compatible(
             prompt,
             api_key,
-            model.split("/", 1)[1] if model.startswith(provider + "/") else model,
+            model_id,
             PROVIDER_CONFIG[provider]["url"],
             provider,
         )
