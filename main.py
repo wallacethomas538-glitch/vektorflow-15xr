@@ -1,19 +1,20 @@
 from fastapi import FastAPI, HTTPException, Request, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from pydantic import BaseModel
 from typing import Optional, List, Dict, Any
 import os, json, logging
 from datetime import datetime
 
-from database import get_user, get_user_stores, get_llm_keys, get_icp_data, save_conversation, get_all_memory
+from database import get_user, get_user_stores, get_llm_keys, get_icp_data, save_conversation, get_all_memory, save_store_token
 from vektor_agent import vektor_chat, detect_intent
 from llm_handler import call_llm, DEFAULT_MODEL
-from store_manager import search_cj_products, get_cj_product_details, connect_store
+from store_manager import search_cj_products, get_cj_product_details, connect_store, ShopifyAPI
+from oauth_handler import generate_oauth_url, exchange_code_for_token
 from trend_engine import get_tiktok_trends
 from vektorflow_agents import run_agent_task, get_orchestrator, get_ad_specialist
-from auth import verify_token, create_token
+from auth import verify_token, create_token, authenticate_user
 from middleware import APIKeyMiddleware
 from seo_optimizer import optimize_seo
 from outreach import handle_outreach
@@ -136,8 +137,8 @@ async def supabase_health():
 @app.post("/commander/login")
 async def commander_login(login_data: CommanderLogin):
     try:
-        user = get_user(login_data.username)
-        if user and user.get("password") == login_data.password:
+        user = authenticate_user(login_data.username, login_data.password, get_user)
+        if user:
             token=create_token({"email":login_data.username,"role":"admin"})
             return {"status":"success","message":"Login successful","token":token,"user":{"username":login_data.username,"role":"admin","permissions":["full_access"]}}
         valid=os.environ.get("VEKTORFLOW_ADMIN_PASSWORD","")
@@ -288,6 +289,73 @@ async def get_trends():
 async def store_connect(store_data: StoreConnectRequest):
     connect_store(store_data.email,store_data.platform,store_data.store_url)
     return {"status":"success","message":f"Successfully connected to {store_data.platform}","platform":store_data.platform,"store_url":store_data.store_url,"connected_at":datetime.utcnow().isoformat()}
+
+# ============ SHOPIFY OAUTH + READ-ONLY SHOP DATA ============
+def _shopify_oauth_configured() -> bool:
+    return bool(os.environ.get("SHOPIFY_CLIENT_ID") and os.environ.get("SHOPIFY_CLIENT_SECRET"))
+
+def _shopify_redirect_uri(request: Request) -> str:
+    configured = os.environ.get("SHOPIFY_OAUTH_REDIRECT_URI", "").strip()
+    if configured:
+        return configured
+    return f"{str(request.base_url).rstrip('/')}/api/shopify/oauth/callback"
+
+def _get_shopify_store(email: str) -> Optional[Dict[str, Any]]:
+    for store in get_user_stores(email) or []:
+        if (store.get("platform") or "").lower() == "shopify" and store.get("access_token"):
+            return store
+    return None
+
+@app.get("/api/shopify/oauth/start")
+async def shopify_oauth_start(request: Request, shop: str, email: str = "commander@vektorflow.com"):
+    if not _shopify_oauth_configured():
+        raise HTTPException(status_code=500, detail="SHOPIFY_CLIENT_ID / SHOPIFY_CLIENT_SECRET are not configured on the server.")
+    redirect_uri = _shopify_redirect_uri(request)
+    oauth_url, _state = generate_oauth_url("shopify", shop, redirect_uri)
+    if not oauth_url:
+        raise HTTPException(status_code=500, detail="Could not build the Shopify OAuth URL.")
+    return RedirectResponse(url=oauth_url)
+
+@app.get("/api/shopify/oauth/callback")
+async def shopify_oauth_callback(request: Request, code: Optional[str] = None, shop: Optional[str] = None, email: str = "commander@vektorflow.com"):
+    if not _shopify_oauth_configured():
+        raise HTTPException(status_code=500, detail="SHOPIFY_CLIENT_ID / SHOPIFY_CLIENT_SECRET are not configured on the server.")
+    if not code or not shop:
+        raise HTTPException(status_code=400, detail="Missing required query params: code and shop.")
+    result = await exchange_code_for_token("shopify", code, shop)
+    if not result.get("success") or not result.get("access_token"):
+        raise HTTPException(status_code=502, detail=f"Shopify token exchange failed: {result.get('error', 'unknown error')}")
+    store_url = shop if "://" in shop else f"https://{shop}"
+    save_store_token(email, "shopify", store_url, result["access_token"])
+    return {"status":"success","message":"Shopify store connected","shop":shop,"store_url":store_url,"connected_at":datetime.utcnow().isoformat()}
+
+@app.get("/api/shopify/products")
+async def shopify_products(email: str = "commander@vektorflow.com", limit: int = 50):
+    store = _get_shopify_store(email)
+    if not store:
+        raise HTTPException(status_code=400, detail="No Shopify store with an access token is connected. Complete OAuth via /api/shopify/oauth/start first.")
+    api = ShopifyAPI(store_url=store["store_url"], access_token=store["access_token"])
+    try:
+        result = await api.get_products(limit=limit)
+    finally:
+        await api.client.aclose()
+    if not result.get("success"):
+        raise HTTPException(status_code=502, detail=f"Shopify API error: {result.get('error')}")
+    return {"status":"success","shop":store["store_url"],"count":len(result.get("products",[])),"products":result.get("products",[]),"timestamp":datetime.utcnow().isoformat()}
+
+@app.get("/api/shopify/orders")
+async def shopify_orders(email: str = "commander@vektorflow.com", limit: int = 50):
+    store = _get_shopify_store(email)
+    if not store:
+        raise HTTPException(status_code=400, detail="No Shopify store with an access token is connected. Complete OAuth via /api/shopify/oauth/start first.")
+    api = ShopifyAPI(store_url=store["store_url"], access_token=store["access_token"])
+    try:
+        result = await api.get_orders(limit=limit)
+    finally:
+        await api.client.aclose()
+    if not result.get("success"):
+        raise HTTPException(status_code=502, detail=f"Shopify API error: {result.get('error')}")
+    return {"status":"success","shop":store["store_url"],"count":len(result.get("orders",[])),"orders":result.get("orders",[]),"timestamp":datetime.utcnow().isoformat()}
 
 @app.get("/api/tasks")
 async def get_tasks():

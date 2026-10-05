@@ -120,6 +120,13 @@ def init_db():
         )
     """)
 
+    # Backward-compatible migration: access_token for OAuth-connected stores.
+    # CREATE TABLE IF NOT EXISTS won't add the column to pre-existing tables.
+    cursor.execute("PRAGMA table_info(user_stores)")
+    _existing_store_cols = {row[1] for row in cursor.fetchall()}
+    if "access_token" not in _existing_store_cols:
+        cursor.execute("ALTER TABLE user_stores ADD COLUMN access_token TEXT")
+
     conn.commit()
     conn.close()
 
@@ -213,6 +220,29 @@ def connect_store(email: str, platform: str, store_url: str):
     conn.commit()
     conn.close()
     return {"platform": platform, "store_url": store_url}
+
+def save_store_token(email: str, platform: str, store_url: str, access_token: str):
+    """Upsert an OAuth access token for a user's store (backward compatible)."""
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute(
+        "SELECT id FROM user_stores WHERE email = ? AND platform = ? AND store_url = ?",
+        (email, platform, store_url),
+    )
+    row = cursor.fetchone()
+    if row:
+        cursor.execute(
+            "UPDATE user_stores SET access_token = ? WHERE id = ?",
+            (access_token, row["id"]),
+        )
+    else:
+        cursor.execute(
+            "INSERT INTO user_stores (email, platform, store_url, access_token) VALUES (?, ?, ?, ?)",
+            (email, platform, store_url, access_token),
+        )
+    conn.commit()
+    conn.close()
+    return {"email": email, "platform": platform, "store_url": store_url}
 
 def get_user_preferences(email: str):
     conn = get_db()
@@ -443,13 +473,15 @@ def init_default_user():
     """Create default commander user if not exists"""
     user = get_user("commander@vektorflow.com")
     if not user:
+        # Lazy import: auth.py requires JWT_SECRET_KEY at import time.
+        from auth import hash_password
         conn = get_db()
         cursor = conn.cursor()
-        # Password is "vektorflow2026" (in production, this would be hashed)
+        # Password is "vektorflow2026", stored as a bcrypt hash.
         cursor.execute("""
             INSERT INTO users (email, password_hash, store_name, tier, trial_expires)
-            VALUES (?, 'vektorflow2026', 'VektorFlow Store', 'premium', datetime('now', '+365 days'))
-        """, ("commander@vektorflow.com",))
+            VALUES (?, ?, 'VektorFlow Store', 'premium', datetime('now', '+365 days'))
+        """, ("commander@vektorflow.com", hash_password("vektorflow2026")))
         conn.commit()
         conn.close()
         print("✅ Default commander user created.")
