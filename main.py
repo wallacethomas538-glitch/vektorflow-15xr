@@ -377,22 +377,6 @@ async def ai_chat(message: AIChatMessage):
     except Exception as e:
         logger.error("AI chat error: %s",e); raise HTTPException(status_code=500,detail=str(e))
 
-@app.get("/api/ai/debug")
-async def ai_debug():
-    """Diagnostic: run a minimal LLM call and return the raw result including errors."""
-    import os
-    try:
-        result=await call_llm(prompt="Say OK",model=DEFAULT_MODEL,user_keys=get_llm_keys("commander@vektorflow.com"),temperature=None)
-        safe=dict(result)
-        # never leak key material
-        safe.pop("api_key",None)
-        return {"status":"success","default_model":DEFAULT_MODEL,
-                "openrouter_key_present":bool(os.getenv("OPENROUTER_API_KEY")),
-                "openrouter_key_len":len(os.getenv("OPENROUTER_API_KEY","")),
-                "llm_result":safe,"timestamp":datetime.utcnow().isoformat()}
-    except Exception as e:
-        logger.error("AI debug error: %s",e); raise HTTPException(status_code=500,detail=str(e))
-
 @app.post("/api/products/search")
 async def search_products(request: Request):
     data=await request.json(); keyword=data.get("keyword","")
