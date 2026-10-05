@@ -57,6 +57,7 @@ class AIChatMessage(BaseModel):
     email: Optional[str] = None
     conversation_id: Optional[str] = None
     temperature: Optional[float] = None
+    search: bool = False
 class ProductInput(BaseModel):
     product_title: str
     supplier_description: str
@@ -338,8 +339,39 @@ async def run_team(request: TeamRunRequest, wait: bool = False):
 async def ai_chat(message: AIChatMessage):
     try:
         temperature=_validate_temperature(message.temperature)
-        result=await call_llm(prompt=message.message,model=DEFAULT_MODEL,user_keys=get_llm_keys(message.email or "commander@vektorflow.com"),temperature=temperature)
-        return {"status":"success","response":result.get("response","I'm here to help."),"timestamp":datetime.utcnow().isoformat()}
+        prompt=message.message
+        search_used=False
+        sources=[]
+        search_note=None
+        if message.search:
+            # Real web search via Brave; never fabricate results.
+            try:
+                from external_tools import brave_search as _web_search
+                data=await _web_search(message.message,count=5)
+                hits=(data.get("results") or [])[:5]
+                if hits:
+                    lines=[f"- {h.get('title','')} ({h.get('url','')})\n  {h.get('description','')}" for h in hits]
+                    today=datetime.utcnow().strftime("%Y-%m-%d")
+                    prompt=(f"Current web context (dated {today}):\n" + "\n".join(lines)
+                            + f"\n\nUser question: {message.message}\n"
+                            + "Answer using the web context above where relevant. Cite sources by title.")
+                    sources=[{"title":h.get("title",""),"url":h.get("url","")} for h in hits]
+                    search_used=True
+                else:
+                    search_note="Web search returned no results; answering without web context."
+            except RuntimeError as e:
+                # Brave API key not configured — degrade gracefully, never fake it.
+                logger.warning("AI chat web search unavailable: %s",e)
+                search_note="Web search is not configured on the backend; answering without web context."
+            except Exception as e:
+                logger.warning("AI chat web search failed: %s",e)
+                search_note="Web search failed; answering without web context."
+        result=await call_llm(prompt=prompt,model=DEFAULT_MODEL,user_keys=get_llm_keys(message.email or "commander@vektorflow.com"),temperature=temperature)
+        resp={"status":"success","response":result.get("response","I'm here to help."),"timestamp":datetime.utcnow().isoformat(),
+              "search_used":search_used,"sources":sources}
+        if search_note:
+            resp["search_note"]=search_note
+        return resp
     except HTTPException:
         raise
     except Exception as e:
