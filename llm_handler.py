@@ -210,9 +210,9 @@ PROVIDER_PREFIXES = {
 }
 
 
-async def _call_llm(prompt: str, model: str, user_keys: Dict) -> Dict:
+async def _call_llm(prompt: str, model: str, user_keys: Dict, temperature: Optional[float] = None) -> Dict:
     if model.startswith("gateway/"):
-        return await call_gateway(prompt, model[len("gateway/"):])
+        return await call_gateway(prompt, model[len("gateway/"):], temperature)
 
     provider = MODEL_PROVIDER.get(model)
     if not provider:
@@ -273,6 +273,7 @@ async def _call_llm(prompt: str, model: str, user_keys: Dict) -> Dict:
             model_id,
             PROVIDER_CONFIG[provider]["url"],
             provider,
+            temperature,
         )
     if provider == "groq":
         return await call_groq(prompt, api_key, model)
@@ -297,13 +298,13 @@ async def _call_llm(prompt: str, model: str, user_keys: Dict) -> Dict:
     else:
         return {"success": False, "error": f"Provider {provider} not configured"}
 
-async def call_llm(prompt: str, model: str, user_keys: Dict) -> Dict:
+async def call_llm(prompt: str, model: str, user_keys: Dict, temperature: Optional[float] = None) -> Dict:
     """Trace every model request while preserving the existing provider/failover logic."""
     with start_span("vektorflow.llm", {"gen_ai.request.model": model}) as span:
-        result = await _call_llm(prompt, model, user_keys)
+        result = await _call_llm(prompt, model, user_keys, temperature)
         # If the shared gateway is unavailable, fail over to direct free OpenRouter.
         if isinstance(result, dict) and not result.get("success") and model.startswith("gateway/"):
-            fallback = await _call_llm(prompt, "openrouter/free", user_keys)
+            fallback = await _call_llm(prompt, "openrouter/free", user_keys, temperature)
             if fallback.get("success"):
                 result = fallback
         if isinstance(result, dict):
@@ -315,7 +316,7 @@ async def call_llm(prompt: str, model: str, user_keys: Dict) -> Dict:
                 span.set_attribute("gen_ai.response.model", str(result.get("model")))
         return result
 
-async def call_gateway(prompt: str, model: str) -> Dict:
+async def call_gateway(prompt: str, model: str, temperature: Optional[float] = None) -> Dict:
     """Call the shared Free LLM Gateway using its OpenAI-compatible endpoint."""
     if not LLM_GATEWAY_URL:
         return {"success": False, "error": "LLM_GATEWAY_URL is not configured."}
@@ -327,7 +328,7 @@ async def call_gateway(prompt: str, model: str) -> Dict:
         "model": requested_model,
         "provider": LLM_GATEWAY_PROVIDER,
         "messages": [{"role": "user", "content": prompt}],
-        "temperature": 0.7,
+        "temperature": temperature if temperature is not None else 0.7,
         "max_tokens": 500,
         "stream": False,
     }
@@ -401,6 +402,7 @@ async def call_openai_compatible(
     model: str,
     url: str,
     provider: str,
+    temperature: Optional[float] = None,
 ) -> Dict:
     """Shared OpenAI-compatible transport for cloud model providers."""
     headers = {
@@ -421,7 +423,7 @@ async def call_openai_compatible(
                 json={
                     "model": model,
                     "messages": [{"role": "user", "content": prompt}],
-                    "temperature": 0.7,
+                    "temperature": temperature if temperature is not None else 0.7,
                     "max_tokens": 500,
                     "stream": False,
                 },

@@ -4,7 +4,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from pydantic import BaseModel
 from typing import Optional, List, Dict, Any
-import os, json, logging
+import os, json, logging, asyncio
 from datetime import datetime
 
 from database import get_user, get_user_stores, get_llm_keys, get_icp_data, save_conversation, get_all_memory, save_store_token
@@ -24,6 +24,9 @@ from organic_content import generate_organic_content
 from mission_control_api import router as mission_control_router
 from memory_api import router as memory_router
 from ai_observability import observability_status
+from workflow_runs import new_run as _new_workflow_run, get_run as _get_workflow_run, \
+    list_runs as _list_workflow_runs, request_cancel as _request_workflow_cancel, \
+    public_view as _workflow_run_view
 from execution_gateway import router as execution_gateway_router
 from second_brain_api import router as second_brain_router
 
@@ -53,6 +56,7 @@ class AIChatMessage(BaseModel):
     context: Optional[Dict[str, Any]] = {}
     email: Optional[str] = None
     conversation_id: Optional[str] = None
+    temperature: Optional[float] = None
 class ProductInput(BaseModel):
     product_title: str
     supplier_description: str
@@ -99,6 +103,7 @@ class AgentChatRequest(BaseModel):
     email: str = "commander@vektorflow.com"
     conversation_history: Optional[List[Dict[str, Any]]] = []
     params: Optional[Dict[str, Any]] = {}
+    temperature: Optional[float] = None
 
 class AgentToolRequest(BaseModel):
     email: str = "commander@vektorflow.com"
@@ -108,6 +113,18 @@ class AdImageRequest(BaseModel):
     prompt: str
     model: str = "flux"
     size: str = "1024x1024"
+
+def _validate_temperature(value):
+    """Return a clamped-validated temperature, or None. Raises 400 if out of range."""
+    if value is None:
+        return None
+    try:
+        t = float(value)
+    except (TypeError, ValueError):
+        raise HTTPException(status_code=400, detail="temperature must be a number between 0.0 and 2.0")
+    if not 0.0 <= t <= 2.0:
+        raise HTTPException(status_code=400, detail="temperature must be between 0.0 and 2.0")
+    return t
 
 @app.get("/", response_class=HTMLResponse)
 async def root():
@@ -207,6 +224,27 @@ async def list_agents():
     roster=get_orchestrator().roster()
     return {"status":"success","count":len(roster),"agents":roster,"timestamp":datetime.utcnow().isoformat()}
 
+@app.get("/api/agents/runs")
+async def list_team_runs():
+    return {"status":"success","runs":_list_workflow_runs(),"timestamp":datetime.utcnow().isoformat()}
+
+@app.get("/api/agents/runs/{run_id}")
+async def get_team_run(run_id: str):
+    run=_get_workflow_run(run_id)
+    if not run:
+        raise HTTPException(status_code=404,detail="Run not found")
+    view=_workflow_run_view(run)
+    if run["status"] in ("completed","cancelled","failed") and run.get("result") is not None:
+        view["result"]=run["result"]
+    return {"status":"success","run":view,"timestamp":datetime.utcnow().isoformat()}
+
+@app.delete("/api/agents/runs/{run_id}")
+async def cancel_team_run(run_id: str):
+    run=_request_workflow_cancel(run_id)
+    if not run:
+        raise HTTPException(status_code=404,detail="Run not found or already finished")
+    return {"status":"cancel_requested","run_id":run_id,"timestamp":datetime.utcnow().isoformat()}
+
 @app.get("/api/agents/{agent_name}")
 async def get_agent(agent_name: str):
     agent=get_orchestrator().get_agent(agent_name)
@@ -241,33 +279,69 @@ async def agent_specific_chat(agent_name: str, request: AgentChatRequest):
         raise HTTPException(status_code=404, detail="Agent not found")
     try:
         email=request.email or "commander@vektorflow.com"
+        temperature=_validate_temperature(request.temperature)
+        params={**(request.params or {}), "conversation_mode": "direct", "agent_name": agent.name}
+        if temperature is not None:
+            params["temperature"]=temperature
         context=AgentContext(email=email,user=get_user(email) or {},stores=get_user_stores(email) or [],
             llm_keys=get_llm_keys(email) or {},icp=get_icp_data(email) or {},memory=get_all_memory(email) or {},
-            params={**(request.params or {}), "conversation_mode": "direct", "agent_name": agent.name},conversation_history=request.conversation_history or [])
+            params=params,conversation_history=request.conversation_history or [])
         result=await agent.run(context,request.message)
         if isinstance(result, dict) and result.get("status") == "failed":
             raise HTTPException(status_code=502, detail=result.get("error", "Agent execution failed"))
         return {"status":"success","agent":agent.summary(),"result":result,"timestamp":datetime.utcnow().isoformat()}
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error("Individual agent chat error: %s",e)
         raise HTTPException(status_code=500,detail=str(e))
+
+async def _run_team_workflow(run_id,goal,context):
+    """Background body for a team workflow run; records outcome in the run registry."""
+    run=_get_workflow_run(run_id)
+    try:
+        run["status"]="running"
+        result=await get_orchestrator().team_execute(goal,context,cancel_event=run["cancel_event"])
+        run["status"]=result.get("status","completed")
+        run["result"]=result
+    except asyncio.CancelledError:
+        # team_execute normally converts cancellation into a partial "cancelled"
+        # result; this guards the case where it propagates instead.
+        if run["status"] != "cancelled":
+            run["status"]="cancelled"
+        raise
+    except Exception as e:
+        logger.error("Team run %s failed: %s",run_id,e)
+        run["status"]="failed"
+        run["error"]=str(e)
+    finally:
+        run["completed_at"]=datetime.utcnow().isoformat()
+
 @app.post("/api/agents/run")
-async def run_team(request: TeamRunRequest):
+async def run_team(request: TeamRunRequest, wait: bool = False):
     from vektorflow_agents import AgentContext
     try:
         email=request.email
         context=AgentContext(email=email,user=get_user(email) or {},stores=get_user_stores(email) or [],
             llm_keys=get_llm_keys(email) or {},icp=get_icp_data(email) or {},memory={},params=request.params or {})
-        result=await get_orchestrator().team_execute(request.goal,context)
-        return {"status":"success",**result,"timestamp":datetime.utcnow().isoformat()}
+        if wait:
+            # Legacy synchronous behavior: await the full 15-agent workflow.
+            result=await get_orchestrator().team_execute(request.goal,context)
+            return {"status":"success",**result,"timestamp":datetime.utcnow().isoformat()}
+        run=_new_workflow_run(request.goal)
+        run["task"]=asyncio.create_task(_run_team_workflow(run["run_id"],request.goal,context))
+        return {"status":"started","run_id":run["run_id"],"timestamp":datetime.utcnow().isoformat()}
     except Exception as e:
         logger.error("Team run error: %s",e); raise HTTPException(status_code=500,detail=str(e))
 
 @app.post("/api/ai/chat")
 async def ai_chat(message: AIChatMessage):
     try:
-        result=await call_llm(prompt=message.message,model=DEFAULT_MODEL,user_keys=get_llm_keys(message.email or "commander@vektorflow.com"))
+        temperature=_validate_temperature(message.temperature)
+        result=await call_llm(prompt=message.message,model=DEFAULT_MODEL,user_keys=get_llm_keys(message.email or "commander@vektorflow.com"),temperature=temperature)
         return {"status":"success","response":result.get("response","I'm here to help."),"timestamp":datetime.utcnow().isoformat()}
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error("AI chat error: %s",e); raise HTTPException(status_code=500,detail=str(e))
 
