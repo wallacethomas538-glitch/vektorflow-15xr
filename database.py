@@ -222,7 +222,19 @@ def connect_store(email: str, platform: str, store_url: str):
     return {"platform": platform, "store_url": store_url}
 
 def save_store_token(email: str, platform: str, store_url: str, access_token: str):
-    """Upsert an OAuth access token for a user's store (backward compatible)."""
+    """Upsert an OAuth access token for a user's store (backward compatible).
+
+    Prefers persistent Supabase storage (public.connected_stores) so the token
+    survives Render redeploys. Falls back to the legacy ephemeral SQLite
+    user_stores table when Supabase is unavailable or the migration has not
+    been run yet.
+    """
+    try:
+        from connected_stores import save_store_token as _supabase_save_store_token
+        if _supabase_save_store_token(email, platform, store_url, access_token):
+            return {"email": email, "platform": platform, "store_url": store_url}
+    except Exception:
+        pass
     conn = get_db()
     cursor = conn.cursor()
     cursor.execute(
