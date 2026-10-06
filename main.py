@@ -423,6 +423,16 @@ def _shopify_redirect_uri(request: Request) -> str:
     return f"{str(request.base_url).rstrip('/')}/api/shopify/oauth/callback"
 
 def _get_shopify_store(email: str) -> Optional[Dict[str, Any]]:
+    # Persistent Supabase token store first (survives redeploys); the helper
+    # returns None when Supabase is unavailable or the migration is not run.
+    try:
+        from connected_stores import get_store_token as _supabase_get_store_token
+        store = _supabase_get_store_token(email, "shopify")
+        if store and store.get("access_token"):
+            return store
+    except Exception:
+        pass
+    # Legacy ephemeral SQLite fallback.
     for store in get_user_stores(email) or []:
         if (store.get("platform") or "").lower() == "shopify" and store.get("access_token"):
             return store
