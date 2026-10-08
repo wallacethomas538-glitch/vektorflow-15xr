@@ -301,6 +301,24 @@ class ShopifyAPI:
             logger.error(f"Shopify get orders error: {e}")
             return {"success": False, "error": str(e), "orders": []}
 
+    async def get_abandoned_checkouts(self, limit: int = 50) -> Dict:
+        """Get abandoned checkouts from Shopify store."""
+        try:
+            response = await self.client.get(
+                f"{self.store_url}/admin/api/2023-10/checkouts.json",
+                params={"limit": limit},
+                headers=self._headers()
+            )
+            response.raise_for_status()
+            data = response.json()
+            return {
+                "success": True,
+                "checkouts": data.get("checkouts", [])
+            }
+        except httpx.HTTPError as e:
+            logger.error(f"Shopify abandoned checkouts error: {e}")
+            return {"success": False, "error": str(e), "checkouts": []}
+
 # ============ WOOCOMMERCE API ============
 
 class WooCommerceAPI:

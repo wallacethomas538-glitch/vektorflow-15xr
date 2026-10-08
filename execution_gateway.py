@@ -18,6 +18,7 @@ from pydantic import BaseModel, Field
 from vektorflow_agents import AgentContext, get_orchestrator
 from database import get_user, get_user_stores, get_llm_keys, get_icp_data, get_all_memory
 from mission_control import propose_action, get_action_proposal
+from kill_switch import get_kill_switch, kill_switch_status
 from src.event_bus import get_event_bus
 
 router = APIRouter(prefix="/api/v1/gateway", tags=["execution-gateway"])
@@ -28,12 +29,23 @@ _started = False
 READ_ONLY_TOOLS = {
     "read_team_results", "check_inventory", "get_inventory_alerts", "get_stores",
     "system_health", "agent_roster", "read_memory", "search_cj_products",
+    "get_cj_product_details",
     "get_tiktok_trends", "get_google_trends", "brave_search", "tavily_search",
     "seo_research", "webscraping_ai",
+    "get_shopify_products", "get_shopify_orders", "watch_new_orders",
+    "watch_abandoned_carts", "classify_customer_message",
+}
+DRAFT_ONLY_TOOLS = {
+    # Drafts/cases only: nothing is sent to a customer and no money moves.
+    "draft_customer_reply", "handle_email_notification", "create_order_service_case",
 }
 MUTATING_TOOLS = {
     "generate_seo", "generate_content", "generate_campaign", "generate_outreach",
-    "apify_actor",
+    "generate_organic_ad", "apify_actor",
+}
+HIGH_RISK_TOOLS = {
+    # Creates a Shopify product (even as a draft): Wallace approves first.
+    "import_supplier_product",
 }
 
 
@@ -53,7 +65,9 @@ def _risk_for(tool: str, requested: str | None) -> str:
         value = requested.lower()
         if value in {"low", "medium", "high", "critical"}:
             return value
-    if tool in READ_ONLY_TOOLS:
+    if tool in HIGH_RISK_TOOLS:
+        return "high"
+    if tool in READ_ONLY_TOOLS or tool in DRAFT_ONLY_TOOLS:
         return "low"
     if tool in MUTATING_TOOLS:
         return "medium"
@@ -110,6 +124,7 @@ async def gateway_status():
             "approval_boundary": True,
             "sandbox_boundary": True,
             "default_fail_closed_unknown_tools": True,
+            "kill_switch": kill_switch_status(),
         },
         "subscriptions": sorted(_gateway_subscriptions),
         "connected_clients": len(ws_clients),
@@ -131,6 +146,15 @@ async def gateway_invoke(request: GatewayInvoke):
         raise HTTPException(404, f"Agent '{request.agent}' not found")
     if request.tool not in {t.get("name") for t in agent.tools}:
         raise HTTPException(403, f"Tool '{request.tool}' is not assigned to {request.agent}")
+    if get_kill_switch().is_killed(agent.name):
+        return {
+            "status": "blocked",
+            "request_id": "req_" + uuid.uuid4().hex,
+            "agent": agent.name,
+            "tool": request.tool,
+            "error": f"Kill switch is on for {agent.name}; tool execution is stopped.",
+            "kill_switch": kill_switch_status(),
+        }
 
     risk = _risk_for(request.tool, request.risk)
     proposal = propose_action(
