@@ -221,6 +221,32 @@ class ShopifyAPI:
             logger.error(f"Shopify get products error: {e}")
             return {"success": False, "error": str(e), "products": []}
     
+    async def get_products_count(self) -> int:
+        """Get total product count from Shopify store (not page size)."""
+        try:
+            response = await self.client.get(
+                f"{self.store_url}/admin/api/2023-10/products/count.json",
+                headers=self._headers()
+            )
+            response.raise_for_status()
+            return int(response.json().get("count", 0))
+        except (httpx.HTTPError, ValueError, TypeError) as e:
+            logger.error(f"Shopify product count error: {e}")
+            return 0
+
+    async def get_orders_count(self) -> int:
+        """Get total order count from Shopify store (not page size)."""
+        try:
+            response = await self.client.get(
+                f"{self.store_url}/admin/api/2023-10/orders/count.json",
+                headers=self._headers()
+            )
+            response.raise_for_status()
+            return int(response.json().get("count", 0))
+        except (httpx.HTTPError, ValueError, TypeError) as e:
+            logger.error(f"Shopify order count error: {e}")
+            return 0
+
     async def create_product(self, product: Dict) -> Dict:
         """Create a product on Shopify."""
         try:

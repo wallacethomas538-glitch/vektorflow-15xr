@@ -23,6 +23,74 @@ from typing import Any, Dict, List, Optional
 from database import get_db
 
 
+import os as _os
+
+
+def _pg_connect():
+    """Connect to Supabase Postgres when DATABASE_URL is configured, else None.
+
+    Render's filesystem is ephemeral: SQLite rows vanish on redeploy/restart.
+    Postgres (via the Supavisor IPv4 pooler) keeps missions durable.
+    """
+    dsn = _os.getenv("DATABASE_URL")
+    if not dsn:
+        return None
+    try:
+        from postgres_connection import connect as _pg_raw_connect
+        from psycopg.rows import dict_row
+        conn = _pg_raw_connect(dsn, timeout=5)
+        conn.row_factory = dict_row
+        return conn
+    except Exception as exc:
+        print(f"[mission-control] Postgres unavailable ({exc}); using SQLite fallback")
+        return None
+
+
+def _open_db():
+    """Return (connection, is_postgres). Prefers Postgres, falls back to SQLite."""
+    pg = _pg_connect()
+    if pg is not None:
+        return pg, True
+    return get_db(), False
+
+
+class _Cursor:
+    """Cursor wrapper translating SQLite '?' placeholders to Postgres '%s'."""
+
+    def __init__(self, cursor, is_postgres):
+        self._cursor = cursor
+        self._is_postgres = is_postgres
+
+    def _translate(self, sql):
+        return sql.replace("?", "%s") if self._is_postgres else sql
+
+    def execute(self, sql, params=()):
+        return self._cursor.execute(self._translate(sql), params)
+
+    def executemany(self, sql, seq):
+        return self._cursor.executemany(self._translate(sql), seq)
+
+    def executescript(self, sql):
+        if self._is_postgres:
+            for stmt in [s.strip() for s in sql.split(";") if s.strip()]:
+                self.execute(stmt)
+            return None
+        return self._cursor.executescript(sql)
+
+    def fetchone(self):
+        return self._cursor.fetchone()
+
+    def fetchall(self):
+        return self._cursor.fetchall()
+
+
+def _cursor(conn, is_postgres):
+    return _Cursor(conn.cursor(), is_postgres)
+
+
+_reaped_stale_missions = False
+
+
 MISSION_STATES = [
     "draft",
     "planning",
@@ -69,8 +137,8 @@ def _json(value: Any) -> str:
 
 def init_mission_control() -> None:
     """Create only the Mission & Control tables if they do not already exist."""
-    conn = get_db()
-    cur = conn.cursor()
+    conn, _pg = _open_db()
+    cur = _cursor(conn, _pg)
     cur.executescript(
         """
         CREATE TABLE IF NOT EXISTS missions (
@@ -135,7 +203,35 @@ def init_mission_control() -> None:
         """
     )
     conn.commit()
+    global _reaped_stale_missions
+    if not _reaped_stale_missions:
+        _reaped_stale_missions = True
+        _reap_stale_missions(cur)
+        conn.commit()
     conn.close()
+
+
+def _reap_stale_missions(cur) -> None:
+    """Mark missions stranded in 'executing' as failed.
+
+    Background execute jobs die with the process (Render sleeps/restarts kill
+    them). Any mission still 'executing' at boot is orphaned: land it as failed
+    so the dashboard never shows a mission stuck forever.
+    """
+    try:
+        cur.execute("SELECT id, email FROM missions WHERE state = 'executing'")
+        stale = cur.fetchall() or []
+        for row in stale:
+            mid = row["id"] if isinstance(row, dict) else row[0]
+            now = _now()
+            cur.execute(
+                "UPDATE missions SET state = 'failed', updated_at = ?, completed_at = ? WHERE id = ?",
+                (now, now, mid),
+            )
+            _audit(cur, mid, "system", "mission.reaped",
+                   {"reason": "service restarted while mission was executing"}, "executing", "failed")
+    except Exception:
+        pass
 
 
 def _row(row: Any) -> Dict[str, Any]:
@@ -172,8 +268,8 @@ def create_mission(
     init_mission_control()
     mission_id = "msn_" + uuid.uuid4().hex
     now = _now()
-    conn = get_db()
-    cur = conn.cursor()
+    conn, _pg = _open_db()
+    cur = _cursor(conn, _pg)
     cur.execute(
         """INSERT INTO missions
         (id,email,objective,constraints,priority,success_criteria,state,workflow,metadata,created_at,updated_at)
@@ -191,8 +287,8 @@ def create_mission(
 
 def get_mission(mission_id: str, email: Optional[str] = None) -> Dict[str, Any]:
     init_mission_control()
-    conn = get_db()
-    cur = conn.cursor()
+    conn, _pg = _open_db()
+    cur = _cursor(conn, _pg)
     if email:
         cur.execute("SELECT * FROM missions WHERE id = ? AND email = ?", (mission_id, email))
     else:
@@ -204,8 +300,8 @@ def get_mission(mission_id: str, email: Optional[str] = None) -> Dict[str, Any]:
 
 def list_missions(email: str, state: Optional[str] = None, limit: int = 50) -> List[Dict[str, Any]]:
     init_mission_control()
-    conn = get_db()
-    cur = conn.cursor()
+    conn, _pg = _open_db()
+    cur = _cursor(conn, _pg)
     if state:
         cur.execute("SELECT * FROM missions WHERE email = ? AND state = ? ORDER BY created_at DESC LIMIT ?", (email, state, limit))
     else:
@@ -224,8 +320,8 @@ def transition_mission(mission_id: str, to_state: str, actor: str, email: Option
     if to_state not in ALLOWED_TRANSITIONS.get(from_state, set()):
         raise ValueError(f"Invalid mission transition: {from_state} -> {to_state}")
     now = _now()
-    conn = get_db()
-    cur = conn.cursor()
+    conn, _pg = _open_db()
+    cur = _cursor(conn, _pg)
     cur.execute(
         "UPDATE missions SET state = ?, updated_at = ?, completed_at = ? WHERE id = ?",
         (to_state, now, now if to_state == "completed" else None, mission_id),
@@ -240,8 +336,8 @@ def add_task(mission_id: str, agent: str, instruction: str, dependencies: Option
     init_mission_control()
     task_id = "tsk_" + uuid.uuid4().hex
     now = _now()
-    conn = get_db()
-    cur = conn.cursor()
+    conn, _pg = _open_db()
+    cur = _cursor(conn, _pg)
     cur.execute(
         """INSERT INTO mission_tasks
         (id,mission_id,agent,instruction,dependencies,risk,status,result,created_at,updated_at)
@@ -256,8 +352,8 @@ def add_task(mission_id: str, agent: str, instruction: str, dependencies: Option
 
 def get_task(task_id: str) -> Dict[str, Any]:
     init_mission_control()
-    conn = get_db()
-    cur = conn.cursor()
+    conn, _pg = _open_db()
+    cur = _cursor(conn, _pg)
     cur.execute("SELECT * FROM mission_tasks WHERE id = ?", (task_id,))
     row = cur.fetchone()
     conn.close()
@@ -266,8 +362,8 @@ def get_task(task_id: str) -> Dict[str, Any]:
 
 def list_tasks(mission_id: str) -> List[Dict[str, Any]]:
     init_mission_control()
-    conn = get_db()
-    cur = conn.cursor()
+    conn, _pg = _open_db()
+    cur = _cursor(conn, _pg)
     cur.execute("SELECT * FROM mission_tasks WHERE mission_id = ? ORDER BY created_at ASC", (mission_id,))
     rows = cur.fetchall()
     conn.close()
@@ -290,8 +386,8 @@ def propose_action(
     proposal_id = "apr_" + uuid.uuid4().hex
     decision = "approved" if policy == "auto" else ("rejected" if policy == "reject" else "pending")
     now = _now()
-    conn = get_db()
-    cur = conn.cursor()
+    conn, _pg = _open_db()
+    cur = _cursor(conn, _pg)
     cur.execute(
         """INSERT INTO action_proposals
         (id,mission_id,task_id,email,agent,action,risk,decision,policy,reason,payload,created_at,resolved_at)
@@ -309,8 +405,8 @@ def propose_action(
 
 def get_action_proposal(proposal_id: str, email: Optional[str] = None) -> Dict[str, Any]:
     init_mission_control()
-    conn = get_db()
-    cur = conn.cursor()
+    conn, _pg = _open_db()
+    cur = _cursor(conn, _pg)
     if email:
         cur.execute("SELECT * FROM action_proposals WHERE id = ? AND email = ?", (proposal_id, email))
     else:
@@ -322,8 +418,8 @@ def get_action_proposal(proposal_id: str, email: Optional[str] = None) -> Dict[s
 
 def list_pending_actions(email: str, limit: int = 50) -> List[Dict[str, Any]]:
     init_mission_control()
-    conn = get_db()
-    cur = conn.cursor()
+    conn, _pg = _open_db()
+    cur = _cursor(conn, _pg)
     cur.execute("SELECT * FROM action_proposals WHERE email = ? AND decision = 'pending' ORDER BY created_at DESC LIMIT ?", (email, limit))
     rows = cur.fetchall()
     conn.close()
@@ -339,8 +435,8 @@ def resolve_action(proposal_id: str, decision: str, actor: str, email: Optional[
     if proposal["decision"] != "pending":
         raise ValueError("Action proposal is already resolved")
     now = _now()
-    conn = get_db()
-    cur = conn.cursor()
+    conn, _pg = _open_db()
+    cur = _cursor(conn, _pg)
     cur.execute(
         "UPDATE action_proposals SET decision = ?, resolved_at = ? WHERE id = ?",
         (decision, now, proposal_id),
@@ -356,8 +452,8 @@ def resolve_action(proposal_id: str, decision: str, actor: str, email: Optional[
 
 def get_audit(mission_id: str, limit: int = 100) -> List[Dict[str, Any]]:
     init_mission_control()
-    conn = get_db()
-    cur = conn.cursor()
+    conn, _pg = _open_db()
+    cur = _cursor(conn, _pg)
     cur.execute("SELECT * FROM mission_audit WHERE mission_id = ? ORDER BY created_at ASC LIMIT ?", (mission_id, limit))
     rows = cur.fetchall()
     conn.close()

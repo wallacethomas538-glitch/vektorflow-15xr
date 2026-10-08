@@ -1,4 +1,5 @@
 """HTTP API for VektorFlow Mission & Control."""
+import asyncio
 from typing import Any, Dict, List, Optional
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
@@ -145,16 +146,11 @@ async def plan_mission(mission_id: str, email: str = "commander@vektorflow.com")
         raise HTTPException(409, str(exc))
 
 
-@router.post("/missions/{mission_id}/execute")
-async def execute_mission(mission_id: str, email: str = "commander@vektorflow.com"):
-    """Execute an approved mission through the existing VektorFlow orchestrator."""
+async def _run_mission_team(mission_id: str, email: str):
+    """Run the 15-agent team for a mission; land it in completed/failed. Shared by both execute modes."""
     mission = get_mission(mission_id, email)
-    if not mission:
-        raise HTTPException(404, "Mission not found")
-    if mission["state"] not in {"ready", "approved"}:
-        raise HTTPException(409, f"Mission must be ready or approved; current state is {mission['state']}")
+    objective = (mission or {}).get("objective", "")
     try:
-        transition_mission(mission_id, "executing", "mission-control", email)
         from vektorflow_agents import AgentContext, get_orchestrator
         from database import get_user, get_user_stores, get_llm_keys, get_icp_data, get_all_memory
         context = AgentContext(
@@ -166,16 +162,51 @@ async def execute_mission(mission_id: str, email: str = "commander@vektorflow.co
             memory=get_all_memory(email) or {},
             params={"mission_id": mission_id, "mission": mission},
         )
-        with start_span("vektorflow.mission", {"vf.mission_id": mission_id, "vf.workflow_id": mission_id, "vf.objective": mission["objective"]}):
-            result = await get_orchestrator().team_execute(mission["objective"], context)
+        with start_span("vektorflow.mission", {"vf.mission_id": mission_id, "vf.workflow_id": mission_id, "vf.objective": objective}):
+            result = await get_orchestrator().team_execute(objective, context)
         transition_mission(mission_id, "completed", "mission-control", email, {"agent_count": 15})
-        return {"status": "success", "mission": get_mission(mission_id, email), "result": result}
+        return result
     except Exception as exc:
         try:
             transition_mission(mission_id, "failed", "mission-control", email, {"error": str(exc)})
         except Exception:
             pass
+        raise
+
+
+async def _execute_mission_background(mission_id: str, email: str) -> None:
+    """Background wrapper: never let an exception escape an asyncio task."""
+    try:
+        await _run_mission_team(mission_id, email)
+    except Exception:
+        pass  # mission already transitioned to failed inside _run_mission_team
+
+
+@router.post("/missions/{mission_id}/execute")
+async def execute_mission(mission_id: str, email: str = "commander@vektorflow.com", wait: bool = True):
+    """Execute an approved mission through the existing VektorFlow orchestrator.
+
+    wait=true (default): run inline and return the result (original behavior).
+    wait=false: transition to executing, launch a background job, return 202-style
+    acceptance immediately; poll GET /missions/{mission_id} for completion.
+    """
+    mission = get_mission(mission_id, email)
+    if not mission:
+        raise HTTPException(404, "Mission not found")
+    if mission["state"] not in {"ready", "approved"}:
+        raise HTTPException(409, f"Mission must be ready or approved; current state is {mission['state']}")
+    try:
+        transition_mission(mission_id, "executing", "mission-control", email)
+    except ValueError as exc:
+        raise HTTPException(409, str(exc))
+    if not wait:
+        asyncio.create_task(_execute_mission_background(mission_id, email))
+        return {"status": "accepted", "mission": get_mission(mission_id, email)}
+    try:
+        result = await _run_mission_team(mission_id, email)
+    except Exception as exc:
         raise HTTPException(502, f"Mission execution failed: {exc}")
+    return {"status": "success", "mission": get_mission(mission_id, email), "result": result}
 
 
 @router.post("/missions/{mission_id}/tasks")
