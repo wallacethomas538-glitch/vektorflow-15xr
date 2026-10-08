@@ -9,13 +9,52 @@ from dataclasses import dataclass, field
 from enum import Enum
 from database import get_user, get_user_stores, get_llm_keys, get_icp_data, save_memory, get_all_memory
 from llm_handler import call_llm, DEFAULT_MODEL
-from store_manager import search_cj_products
+from store_manager import search_cj_products, get_cj_product_details
 from trend_engine import get_tiktok_trends
 from external_tools import brave_search, tavily_search, apify_actor, webscraping_ai
 from ai_observability import start_span
 from agent_personas import AGENT_PERSONAS
+from kill_switch import get_kill_switch
+import store_ops
+from store_ops import get_agent_playbook
 
 logger = logging.getLogger("vektorflow")
+
+# Tool risk classes used by the agent layer. Read-only and draft-only tools may
+# run as evidence gathering; mutating or customer/money-adjacent tools stay
+# behind Wallace's approval gate.
+TOOL_RISK = {
+    "read_team_results": "low",
+    "check_inventory": "low",
+    "get_inventory_alerts": "low",
+    "get_stores": "low",
+    "system_health": "low",
+    "agent_roster": "low",
+    "read_memory": "low",
+    "search_cj_products": "low",
+    "get_cj_product_details": "low",
+    "get_tiktok_trends": "low",
+    "get_google_trends": "low",
+    "brave_search": "low",
+    "tavily_search": "low",
+    "seo_research": "low",
+    "webscraping_ai": "low",
+    "get_shopify_products": "low",
+    "get_shopify_orders": "low",
+    "watch_new_orders": "low",
+    "watch_abandoned_carts": "low",
+    "classify_customer_message": "low",
+    "draft_customer_reply": "low",
+    "handle_email_notification": "low",
+    "create_order_service_case": "low",
+    "generate_organic_ad": "medium",
+    "generate_content": "medium",
+    "generate_campaign": "medium",
+    "generate_seo": "medium",
+    "generate_outreach": "medium",
+    "apify_actor": "medium",
+    "import_supplier_product": "high",
+}
 
 class AgentStatus(Enum):
     IDLE="idle"; RUNNING="running"; COMPLETED="completed"; FAILED="failed"
@@ -39,9 +78,17 @@ class BaseAgent:
         self.status=AgentStatus.IDLE; self.result=None
 
     async def use_tool(self,tool_name:str,context,**kwargs):
+        if get_kill_switch().is_killed(self.name):
+            return {"success": False, "blocked": True, "status": "blocked", "tool": tool_name,
+                    "error": f"Kill switch is on for {self.name}; tool execution is stopped."}
         handler=self.tool_handlers.get(tool_name)
         if handler is None:
             raise ValueError(f"Tool '{tool_name}' is not available to {self.name}")
+        risk=TOOL_RISK.get(tool_name, "high")
+        params=getattr(context, "params", {}) or {}
+        if risk in {"high", "critical"} and not params.get("approval_granted"):
+            return {"success": False, "blocked": True, "status": "awaiting_approval", "tool": tool_name,
+                    "risk": risk, "error": f"Tool '{tool_name}' is {risk}-risk and requires Wallace's approval before it runs."}
         with start_span(
             "vektorflow.tool",
             {
@@ -62,6 +109,11 @@ class BaseAgent:
 
         run_id=str(uuid.uuid4())
         bus=get_event_bus()
+
+        if get_kill_switch().is_killed(self.name):
+            self.status=AgentStatus.FAILED
+            return {"agent": self.name, "status": "blocked", "blocked": True, "run_id": run_id,
+                    "error": f"Kill switch is on for {self.name}; agent stopped before tools or LLM work."}
 
         # Consume targeted EventBus handoffs before executing this agent's task.
         pending_messages=[] if context.params.get("conversation_mode") == "direct" else bus.receive_agent_messages(self.name, limit=20)
@@ -160,16 +212,63 @@ class BaseAgent:
             return {"agent":self.name,"error":str(exc),"status":"failed","run_id":run_id}
     async def _execute(self,context,instruction): raise NotImplementedError
     def summary(self):
-        return {"name":self.name,"description":self.description,"persona":self.persona,"status":self.status.value,"tools":[t["name"] for t in self.tools]}
+        return {"name":self.name,"description":self.description,"persona":self.persona,"status":self.status.value,"tools":[t["name"] for t in self.tools],"playbook_sections":store_ops.AGENT_PLAYBOOK_SECTIONS.get(self.name.lower(),[])}
+    async def _gather_tool_evidence(self,context,instruction):
+        """Run assigned low-risk tools before reasoning when the task needs them.
+
+        This is the difference between a role prompt and a working agent: the
+        LLM receives tool evidence (products, orders, carts, inventory, team
+        results) instead of improvising from the instruction alone. Mutating
+        tools are never auto-run here; they stay behind the approval gate.
+        """
+        text=(instruction or "").lower()
+        params=getattr(context, "params", {}) or {}
+        wanted=[]
+        def wants(tool, *terms):
+            if tool in self.tool_handlers and any(term in text for term in terms):
+                wanted.append(tool)
+        if "read_team_results" in self.tool_handlers and context.results:
+            wanted.append("read_team_results")
+        wants("check_inventory", "inventory", "stock", "low stock", "out of stock")
+        wants("get_inventory_alerts", "inventory alert", "stock alert", "low stock")
+        wants("get_shopify_products", "product", "catalog", "store", "shopify", "listing", "bundle")
+        wants("get_shopify_orders", "order", "customer", "fulfillment", "shipping", "service")
+        wants("watch_new_orders", "new order", "new orders", "order came in", "orders")
+        wants("watch_abandoned_carts", "abandoned", "cart", "checkout")
+        wants("search_cj_products", "supplier", "cj", "dropship", "source product")
+        wants("get_cj_product_details", "supplier product", "cj product", "product id")
+        if "handle_email_notification" in self.tool_handlers and isinstance(params.get("email_event"), dict):
+            wanted.append("handle_email_notification")
+        if "classify_customer_message" in self.tool_handlers and isinstance(params.get("customer_message"), dict):
+            wanted.append("classify_customer_message")
+        if "create_order_service_case" in self.tool_handlers and isinstance(params.get("order"), dict):
+            wanted.append("create_order_service_case")
+        evidence={}
+        seen=set()
+        for tool in wanted:
+            if tool in seen:
+                continue
+            seen.add(tool)
+            try:
+                evidence[tool]=await self.use_tool(tool, context)
+            except Exception as exc:
+                evidence[tool]={"success": False, "error": str(exc)}
+        if evidence:
+            params["tool_evidence"]=evidence
+            context.params=params
+        return evidence
     async def _llm_role(self,context,instruction):
         shared=json.dumps(context.results,default=str)[-12000:]
         prompt=f"""You are the {self.name} agent in VektorFlow 15XR.
 Persona: {self.persona}
 Duty: {self.description}
+{get_agent_playbook(self.name)}
 You operate an e-commerce business as part of a 15-agent team.
 User goal/instruction: {instruction}
 Shared work from other agents:
 {shared}
+Tool evidence gathered for this run:
+{json.dumps(context.params.get("tool_evidence", {}),default=str)[-8000:]}
 Business context: {json.dumps(context.params,default=str)}
 Conversation with this agent:
 {json.dumps(context.conversation_history[-12:],default=str)}
@@ -182,9 +281,12 @@ Respond naturally as the {self.name} agent. Do not return JSON, markdown data st
         prompt=f"""You are the {self.name} agent in VektorFlow 15XR.
 Persona: {self.persona}
 Duty: {self.description}
+{get_agent_playbook(self.name)}
 User goal/instruction: {instruction}
 Shared work from other agents:
 {shared}
+Tool evidence gathered for this run:
+{json.dumps(context.params.get("tool_evidence", {}),default=str)[-8000:]}
 Business context: {json.dumps(context.params,default=str)}
 Return concise JSON with keys: status, message, actions, handoff, evidence. The message must be a natural response from the agent, not JSON or tool metadata. Never return an empty message when the assigned duty can be performed from the supplied context.
 Never claim an external action was completed unless the connected integration actually performed it."""
@@ -200,8 +302,8 @@ Never claim an external action was completed unless the connected integration ac
 class ScoutAgent(BaseAgent):
     def __init__(self):
         super().__init__("Scout","Discovers products, niches, demand and trends.",
-            _tools("search_cj_products","get_tiktok_trends","get_google_trends","brave_search","tavily_search","apify_actor"),
-            {"search_cj_products":search_cj_products,"get_tiktok_trends":_tiktok_trends,"get_google_trends":_google_trends,"brave_search":_brave_search,"tavily_search":_tavily_search,"apify_actor":_apify_actor})
+            _tools("search_cj_products","get_cj_product_details","get_shopify_products","get_tiktok_trends","get_google_trends","brave_search","tavily_search","apify_actor"),
+            {"search_cj_products":search_cj_products,"get_cj_product_details":_cj_product_details,"get_shopify_products":_store_products,"get_tiktok_trends":_tiktok_trends,"get_google_trends":_google_trends,"brave_search":_brave_search,"tavily_search":_tavily_search,"apify_actor":_apify_actor})
     async def _execute(self,context,instruction):
         normalized = instruction.lower().strip()
         # Direct conversation should go through the LLM. Tool-backed discovery
@@ -217,7 +319,15 @@ class ScoutAgent(BaseAgent):
         return await self._llm_role(context, instruction)
 
 class RoleAgent(BaseAgent):
-    async def _execute(self,context,instruction): return await self._llm_structured(context,instruction)
+    async def _execute(self,context,instruction):
+        evidence=await self._gather_tool_evidence(context,instruction)
+        result=await self._llm_structured(context,instruction)
+        if isinstance(result,dict):
+            result.setdefault("agent",self.name)
+            if evidence:
+                result["tool_evidence"]=evidence
+                result["tool_calls"]=[{"tool":tool,"status":"failed" if isinstance(value,dict) and value.get("success") is False else "completed"} for tool,value in evidence.items()]
+        return result
 
 
 def _read_team_results(context, agent_name=None):
@@ -230,12 +340,15 @@ def _read_team_results(context, agent_name=None):
 
 class SmaugAgent(RoleAgent):
     def __init__(self,name="Smaug",description="Owns profit strategy, unit economics, budgets and treasury decisions."):
-        super().__init__(name,description,_tools("read_team_results","check_inventory"),{"read_team_results":_read_team_results,"check_inventory":_inventory_check})
+        super().__init__(name,description,_tools("read_team_results","check_inventory","get_shopify_products","get_shopify_orders","watch_new_orders"),{"read_team_results":_read_team_results,"check_inventory":_inventory_check,"get_shopify_products":_store_products,"get_shopify_orders":_store_orders,"watch_new_orders":_watch_new_orders})
 
     async def _execute(self,context,instruction):
         team_results=await self.use_tool("read_team_results",context)
         context.params["smaug_input"]=team_results
+        evidence=await self._gather_tool_evidence(context,instruction)
         result=await self._llm_role(context,instruction)
+        tool_calls=[{"tool":"read_team_results","status":"completed","agents_available":list(team_results.keys())}]
+        tool_calls += [{"tool":tool,"status":"failed" if isinstance(value,dict) and value.get("success") is False else "completed"} for tool,value in evidence.items()]
         return {
             "agent": self.name,
             "status": "completed",
@@ -243,7 +356,8 @@ class SmaugAgent(RoleAgent):
             "actions": [],
             "handoff": "",
             "evidence": team_results,
-            "tool_calls": [{"tool":"read_team_results","status":"completed","agents_available":list(team_results.keys())}]
+            "tool_evidence": evidence,
+            "tool_calls": tool_calls
         }
 
 
@@ -306,6 +420,31 @@ def get_ad_specialist():
     return _ad_specialist
 
 
+async def _cj_product_details(context, product_id=""):
+    return await get_cj_product_details(product_id)
+async def _store_products(context, limit=50):
+    return await store_ops.get_shopify_products(context, limit=limit)
+async def _store_orders(context, limit=50):
+    return await store_ops.get_shopify_orders(context, limit=limit)
+async def _watch_new_orders(context, limit=50, alert_existing=False):
+    return await store_ops.watch_new_orders(context, limit=limit, alert_existing=alert_existing)
+async def _watch_abandoned_carts(context, limit=50):
+    return await store_ops.watch_abandoned_carts(context, limit=limit)
+async def _import_supplier_product(context, **kwargs):
+    return await store_ops.import_supplier_product(context, **kwargs)
+def _handle_email_notification(context, **kwargs):
+    params=getattr(context, "params", {}) or {}
+    event=params.get("email_event") if isinstance(params.get("email_event"), dict) else {}
+    return store_ops.handle_email_notification(context, **{**event, **kwargs})
+def _draft_customer_reply(context, **kwargs):
+    return store_ops.draft_customer_reply(context, **kwargs)
+def _classify_customer_message(context, subject="", body=""):
+    params=getattr(context, "params", {}) or {}
+    event=params.get("customer_message") if isinstance(params.get("customer_message"), dict) else {}
+    return store_ops.classify_customer_message(subject or event.get("subject", ""), body or event.get("body", ""))
+def _create_order_service_case(context, order=None):
+    params=getattr(context, "params", {}) or {}
+    return store_ops.create_order_service_case(context, order or params.get("order") or {})
 def _agent_health(context): return {"status":"healthy","agent":context.params.get("agent_name","unknown")}
 def _agent_info(context): return get_orchestrator().roster()
 async def _inventory_check(context):
@@ -343,10 +482,10 @@ async def _apify_actor(context, actor_id="", run_input=None):
 async def _webscraping_ai(context, url="", question=None):
     return await webscraping_ai(url, question)
 def _tools(*names):
-    catalog={"search_cj_products":{"name":"search_cj_products","description":"Search supplier catalog"},"get_tiktok_trends":{"name":"get_tiktok_trends","description":"Find TikTok trend signals"},"get_google_trends":{"name":"get_google_trends","description":"Find Google trend signals"},"read_team_results":{"name":"read_team_results","description":"Read results from other agents"},"check_inventory":{"name":"check_inventory","description":"Check connected-store inventory and alerts"},"get_inventory_alerts":{"name":"get_inventory_alerts","description":"Summarize inventory alerts"},"get_stores":{"name":"get_stores","description":"Read connected store configuration"},"generate_seo":{"name":"generate_seo","description":"Generate SEO metadata"},"seo_research":{"name":"seo_research","description":"Run provider-neutral SEO keyword clustering and on-page audit"},"generate_content":{"name":"generate_content","description":"Generate organic content"},"generate_campaign":{"name":"generate_campaign","description":"Generate a marketing campaign"},"generate_outreach":{"name":"generate_outreach","description":"Generate customer outreach"},"system_health":{"name":"system_health","description":"Check VektorFlow service health"},"agent_roster":{"name":"agent_roster","description":"Read the active 15-agent roster"},"read_memory":{"name":"read_memory","description":"Read shared VektorFlow memory"},"brave_search":{"name":"brave_search","description":"Search the web for current research and competitive intelligence"},"tavily_search":{"name":"tavily_search","description":"Run agent-oriented web research with grounded sources"},"apify_actor":{"name":"apify_actor","description":"Run an Apify web-data extraction Actor"},"webscraping_ai":{"name":"webscraping_ai","description":"Fetch or question a webpage through a rendering/extraction API"}}
+    catalog={"search_cj_products":{"name":"search_cj_products","description":"Search supplier catalog"},"get_cj_product_details":{"name":"get_cj_product_details","description":"Fetch one exact CJ supplier product by product id"},"get_tiktok_trends":{"name":"get_tiktok_trends","description":"Find TikTok trend signals"},"get_google_trends":{"name":"get_google_trends","description":"Find Google trend signals"},"read_team_results":{"name":"read_team_results","description":"Read results from other agents"},"check_inventory":{"name":"check_inventory","description":"Check connected-store inventory and alerts"},"get_inventory_alerts":{"name":"get_inventory_alerts","description":"Summarize inventory alerts"},"get_stores":{"name":"get_stores","description":"Read connected store configuration"},"get_shopify_products":{"name":"get_shopify_products","description":"Read products from the connected Shopify store"},"get_shopify_orders":{"name":"get_shopify_orders","description":"Read orders from the connected Shopify store"},"watch_new_orders":{"name":"watch_new_orders","description":"Return Shopify orders not seen before (first run sets a silent baseline)"},"watch_abandoned_carts":{"name":"watch_abandoned_carts","description":"List abandoned carts with draft-only recovery messages"},"import_supplier_product":{"name":"import_supplier_product","description":"Import one exact CJ supplier product into Shopify as a draft (approval-gated)"},"handle_email_notification":{"name":"handle_email_notification","description":"Turn an email event into a service case plus draft reply for Wallace's approval"},"draft_customer_reply":{"name":"draft_customer_reply","description":"Draft a customer reply; never sends"},"classify_customer_message":{"name":"classify_customer_message","description":"Classify a customer message and escalation priority"},"create_order_service_case":{"name":"create_order_service_case","description":"Create an order service case checklist"},"generate_seo":{"name":"generate_seo","description":"Generate SEO metadata"},"seo_research":{"name":"seo_research","description":"Run provider-neutral SEO keyword clustering and on-page audit"},"generate_content":{"name":"generate_content","description":"Generate organic content"},"generate_organic_ad":{"name":"generate_organic_ad","description":"Write organic social ad copy Wallace can copy and post himself"},"generate_campaign":{"name":"generate_campaign","description":"Generate a marketing campaign"},"generate_outreach":{"name":"generate_outreach","description":"Generate customer outreach"},"system_health":{"name":"system_health","description":"Check VektorFlow service health"},"agent_roster":{"name":"agent_roster","description":"Read the active 15-agent roster"},"read_memory":{"name":"read_memory","description":"Read shared VektorFlow memory"},"brave_search":{"name":"brave_search","description":"Search the web for current research and competitive intelligence"},"tavily_search":{"name":"tavily_search","description":"Run agent-oriented web research with grounded sources"},"apify_actor":{"name":"apify_actor","description":"Run an Apify web-data extraction Actor"},"webscraping_ai":{"name":"webscraping_ai","description":"Fetch or question a webpage through a rendering/extraction API"}}
     return [catalog[n] for n in names]
 def _handler_map(names):
-    return {"search_cj_products":search_cj_products,"get_tiktok_trends":_tiktok_trends,"get_google_trends":_google_trends,"read_team_results":_read_team_results,"check_inventory":_inventory_check,"get_inventory_alerts":_inventory_alerts,"get_stores":_stores,"generate_seo":_seo,"seo_research":_seo_research,"generate_content":_organic_content,"generate_campaign":_campaign,"generate_outreach":_outreach,"system_health":_agent_health,"agent_roster":_agent_info,"read_memory":_memory,"brave_search":_brave_search,"tavily_search":_tavily_search,"apify_actor":_apify_actor,"webscraping_ai":_webscraping_ai}
+    return {"search_cj_products":search_cj_products,"get_cj_product_details":_cj_product_details,"get_tiktok_trends":_tiktok_trends,"get_google_trends":_google_trends,"read_team_results":_read_team_results,"check_inventory":_inventory_check,"get_inventory_alerts":_inventory_alerts,"get_stores":_stores,"get_shopify_products":_store_products,"get_shopify_orders":_store_orders,"watch_new_orders":_watch_new_orders,"watch_abandoned_carts":_watch_abandoned_carts,"import_supplier_product":_import_supplier_product,"handle_email_notification":_handle_email_notification,"draft_customer_reply":_draft_customer_reply,"classify_customer_message":_classify_customer_message,"create_order_service_case":_create_order_service_case,"generate_seo":_seo,"seo_research":_seo_research,"generate_content":_organic_content,"generate_organic_ad":_organic_content,"generate_campaign":_campaign,"generate_outreach":_outreach,"system_health":_agent_health,"agent_roster":_agent_info,"read_memory":_memory,"brave_search":_brave_search,"tavily_search":_tavily_search,"apify_actor":_apify_actor,"webscraping_ai":_webscraping_ai}
 
 AGENT_ROLES=[
 ("Scout","Discovers products, niches, demand and trends."),
@@ -375,7 +514,7 @@ class Orchestrator:
             elif name=="Smaug":
                 agent=SmaugAgent(name,description)
             else:
-                tool_sets={"Architect":["agent_roster","read_team_results"],"DaVinci":["generate_content","generate_seo","seo_research","webscraping_ai"],"Rook":["check_inventory","get_stores"],"Aegis":["system_health","get_stores"],"Arbiter":["agent_roster","read_team_results"],"Sentinel":["system_health","check_inventory","get_inventory_alerts"],"Echo":["generate_outreach","read_memory"],"Cerebrum":["read_memory","read_team_results"],"ViralDet":["get_tiktok_trends","get_google_trends","brave_search","tavily_search"],"Shadow":["get_google_trends","get_tiktok_trends","seo_research","brave_search","tavily_search","webscraping_ai"],"Bundler":["read_team_results","generate_campaign"],"Pivot":["read_team_results","generate_campaign"],"Oracle":["read_team_results","read_memory"]}.get(name,["read_team_results"])
+                tool_sets={"Architect":["agent_roster","read_team_results","system_health"],"DaVinci":["generate_content","generate_organic_ad","generate_seo","seo_research","webscraping_ai","get_shopify_products","read_team_results"],"Rook":["check_inventory","get_stores","get_shopify_products","get_shopify_orders","import_supplier_product","watch_new_orders","watch_abandoned_carts","create_order_service_case"],"Aegis":["system_health","get_stores","get_shopify_orders","classify_customer_message","read_team_results"],"Arbiter":["agent_roster","read_team_results","classify_customer_message","handle_email_notification","get_shopify_orders","watch_abandoned_carts"],"Sentinel":["system_health","check_inventory","get_inventory_alerts","get_shopify_products","get_shopify_orders","watch_new_orders","watch_abandoned_carts"],"Echo":["generate_outreach","read_memory","handle_email_notification","draft_customer_reply","classify_customer_message","get_shopify_orders","watch_new_orders","create_order_service_case"],"Cerebrum":["read_memory","read_team_results","get_shopify_products","get_shopify_orders"],"ViralDet":["get_tiktok_trends","get_google_trends","brave_search","tavily_search","get_shopify_products"],"Shadow":["get_google_trends","get_tiktok_trends","seo_research","brave_search","tavily_search","webscraping_ai","get_shopify_products"],"Bundler":["read_team_results","generate_campaign","get_shopify_products","check_inventory"],"Pivot":["read_team_results","generate_campaign","watch_abandoned_carts","get_shopify_orders"],"Oracle":["read_team_results","read_memory","get_shopify_products","get_shopify_orders"]}.get(name,["read_team_results"])
                 handlers=_handler_map(tool_sets)
                 agent=RoleAgent(name,description,_tools(*tool_sets),handlers)
             self.register_agent(agent)

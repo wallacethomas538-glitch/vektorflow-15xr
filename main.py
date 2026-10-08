@@ -469,11 +469,12 @@ async def shopify_products(email: str = "commander@vektorflow.com", limit: int =
     api = ShopifyAPI(store_url=store["store_url"], access_token=store["access_token"])
     try:
         result = await api.get_products(limit=limit)
+        total = await api.get_products_count()
     finally:
         await api.client.aclose()
     if not result.get("success"):
         raise HTTPException(status_code=502, detail=f"Shopify API error: {result.get('error')}")
-    return {"status":"success","shop":store["store_url"],"count":len(result.get("products",[])),"products":result.get("products",[]),"timestamp":datetime.utcnow().isoformat()}
+    return {"status":"success","shop":store["store_url"],"count":len(result.get("products",[])),"total":total,"products":result.get("products",[]),"timestamp":datetime.utcnow().isoformat()}
 
 @app.get("/api/shopify/orders")
 async def shopify_orders(email: str = "commander@vektorflow.com", limit: int = 50):
@@ -483,11 +484,12 @@ async def shopify_orders(email: str = "commander@vektorflow.com", limit: int = 5
     api = ShopifyAPI(store_url=store["store_url"], access_token=store["access_token"])
     try:
         result = await api.get_orders(limit=limit)
+        total = await api.get_orders_count()
     finally:
         await api.client.aclose()
     if not result.get("success"):
         raise HTTPException(status_code=502, detail=f"Shopify API error: {result.get('error')}")
-    return {"status":"success","shop":store["store_url"],"count":len(result.get("orders",[])),"orders":result.get("orders",[]),"timestamp":datetime.utcnow().isoformat()}
+    return {"status":"success","shop":store["store_url"],"count":len(result.get("orders",[])),"total":total,"orders":result.get("orders",[]),"timestamp":datetime.utcnow().isoformat()}
 
 @app.get("/api/tasks")
 async def get_tasks():

@@ -14,6 +14,8 @@ import os, time, threading
 from collections import defaultdict
 from typing import Any, Dict, Optional
 
+from kill_switch import get_kill_switch, kill_switch_status
+
 DEFAULT_AGENT_POLICY = {
     "tools": "declared",
     "models": "*",
@@ -21,8 +23,15 @@ DEFAULT_AGENT_POLICY = {
     "tpm": int(os.getenv("VF_AGENT_TPM", "120000")),
 }
 
-# Explicitly deny host-level execution tools by default.
-DENIED_TOOLS = {"host_shell", "host_exec", "host_filesystem"}
+# Explicitly deny host-level execution, customer sends, and money tools by default.
+DENIED_TOOLS = {
+    "host_shell", "host_exec", "host_filesystem",
+    "send_email", "send_customer_email", "send_customer_message",
+    "process_payment", "issue_refund", "refund", "payout", "charge_card",
+}
+
+# Tools that change store state or touch money-adjacent decisions always ask.
+APPROVAL_REQUIRED_TOOLS = {"import_supplier_product"}
 
 class PolicyDenied(Exception):
     pass
@@ -42,11 +51,13 @@ def _tool_names(agent: str) -> set[str]:
 def authorize_tool(agent: str, tool: str, *, mission_id: Optional[str]=None,
                    risk: str="medium", require_approval: bool=False) -> Dict[str, Any]:
     if tool in DENIED_TOOLS:
-        return {"decision":"reject","allowed":False,"reason":"Host-level execution is prohibited by default."}
+        return {"decision":"reject","allowed":False,"reason":"Host execution, customer sends, and money actions are prohibited by default."}
+    if get_kill_switch().is_killed(agent):
+        return {"decision":"reject","allowed":False,"reason":f"Kill switch is on for agent '{agent}'."}
     allowed = tool in _tool_names(agent)
     if not allowed:
         return {"decision":"reject","allowed":False,"reason":f"Tool '{tool}' is not assigned to agent '{agent}'."}
-    if require_approval or risk.lower() in {"high","critical"}:
+    if require_approval or tool in APPROVAL_REQUIRED_TOOLS or risk.lower() in {"high","critical"}:
         return {"decision":"ask","allowed":False,"reason":"Human approval is required before this tool action."}
     return {"decision":"allow","allowed":True,"reason":"Tool is assigned to the agent and passed policy checks."}
 
@@ -91,4 +102,6 @@ def policy_status() -> Dict[str, Any]:
         "allowed_models": os.getenv("VF_ALLOWED_MODELS", "").strip() or "*",
         "host_execution_denied_by_default": True,
         "denied_tools": sorted(DENIED_TOOLS),
+        "approval_required_tools": sorted(APPROVAL_REQUIRED_TOOLS),
+        "kill_switch": kill_switch_status(),
     }
