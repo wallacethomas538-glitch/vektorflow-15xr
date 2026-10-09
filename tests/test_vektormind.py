@@ -201,3 +201,28 @@ class SerperProviderTests(unittest.IsolatedAsyncioTestCase):
         with mock.patch.dict(os.environ, {"SERPER_API_KEY": "k"}, clear=True):
             rows = {r["provider"]: r["configured"] for r in external_tools.tool_status()}
         self.assertTrue(rows["Serper (Google)"])
+
+    async def test_serper_failure_falls_back_and_reports(self):
+        async def boom(query, count=10):
+            raise RuntimeError("HTTP 401")
+        async def fake_brave(query, count=10):
+            return {"provider": "brave", "query": query,
+                    "results": [{"title": "B", "url": "https://b.co", "description": "d"}]}
+        with mock.patch.dict(os.environ, {"SERPER_API_KEY": "bad", "BRAVE_SEARCH_API_KEY": "k"}, clear=True), \
+             mock.patch.object(external_tools, "serper_search", boom), \
+             mock.patch.object(external_tools, "brave_search", fake_brave):
+            data = await vm.web_search("q")
+        self.assertEqual(data["provider"], "brave")
+        self.assertEqual(len(data["fallbacks"]), 1)
+        self.assertTrue(data["fallbacks"][0].startswith("serper:"))
+        self.assertIn("401", data["fallbacks"][0])
+
+    async def test_first_provider_success_has_empty_fallbacks(self):
+        async def fake_serper(query, count=10):
+            return {"provider": "serper", "query": query,
+                    "results": [{"title": "G", "url": "https://g.co", "description": "S"}]}
+        with mock.patch.dict(os.environ, {"SERPER_API_KEY": "k"}, clear=True), \
+             mock.patch.object(external_tools, "serper_search", fake_serper):
+            data = await vm.web_search("q")
+        self.assertEqual(data["provider"], "serper")
+        self.assertEqual(data["fallbacks"], [])

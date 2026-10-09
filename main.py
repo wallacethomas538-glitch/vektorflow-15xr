@@ -433,6 +433,9 @@ async def ai_chat(message: AIChatMessage):
                     sources=[{"title":h.get("title",""),"url":h.get("url","")} for h in hits]
                     search_used=True
                     searched_provider = data.get("provider")
+                    if data.get("fallbacks"):
+                        search_note=("Search provider fell back: " + "; ".join(data["fallbacks"])
+                                     + f". Answered via {searched_provider}.")
                 else:
                     search_note="Web search returned no results; answering without web context."
             except RuntimeError as e:

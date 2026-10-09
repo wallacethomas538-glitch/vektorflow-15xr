@@ -114,7 +114,7 @@ async def web_search(query: str, count: int = 5) -> dict[str, Any]:
     if not providers:
         raise RuntimeError(
             "Web search is not configured on the backend "
-            "(no BRAVE_SEARCH_API_KEY or TAVILY_API_KEY in the environment)."
+            "(no SERPER_API_KEY, BRAVE_SEARCH_API_KEY or TAVILY_API_KEY in the environment)."
         )
     errors: list[str] = []
     for provider in providers:
@@ -135,7 +135,8 @@ async def web_search(query: str, count: int = 5) -> dict[str, Any]:
                     "url": item.get("url") or "",
                     "description": item.get("description") or item.get("content") or "",
                 })
-            return {"provider": provider, "query": query, "results": results}
+            return {"provider": provider, "query": query, "results": results,
+                    "fallbacks": list(errors)}
         except Exception as exc:  # try the next configured provider
             errors.append(f"{provider}: {exc}")
     raise RuntimeError("Web search failed on all configured providers (" + "; ".join(errors) + ").")
