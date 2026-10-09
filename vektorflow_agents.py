@@ -367,13 +367,13 @@ class AdImageAgent:
     description = "Generates advertisement imagery through Pollinations."
 
     def __init__(self):
-        self.api_key = os.getenv("POLLINATIONS_ADS_KEY", "")
+        self.api_key = os.getenv("POLLINATIONS_ADS_KEY", "") or os.getenv("POLLINATIONS_API_KEY", "")
         self.api_url = os.getenv("POLLINATIONS_API_URL", "https://gen.pollinations.ai").rstrip("/")
         self.referrer = os.getenv("POLLINATIONS_REFERRER", "vektorflow-ai")
 
     async def generate_image(self, prompt: str, model: str = "flux", size: str = "1024x1024"):
         if not self.api_key:
-            raise RuntimeError("POLLINATIONS_ADS_KEY is not configured")
+            raise RuntimeError("Pollinations is not configured on the backend (POLLINATIONS_API_KEY missing from the environment)")
         prompt = prompt.strip()
         if not prompt:
             raise ValueError("Prompt required")

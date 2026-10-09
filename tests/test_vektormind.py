@@ -123,3 +123,26 @@ class BrowseTests(unittest.IsolatedAsyncioTestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class AdSpecialistKeyTests(unittest.TestCase):
+    def test_accepts_pollinations_api_key_name(self):
+        from vektorflow_agents import AdImageAgent
+        with mock.patch.dict(os.environ, {"POLLINATIONS_API_KEY": "free-key"}, clear=True):
+            agent = AdImageAgent()
+        self.assertEqual(agent.api_key, "free-key")
+
+    def test_ads_key_name_still_works(self):
+        from vektorflow_agents import AdImageAgent
+        with mock.patch.dict(os.environ, {"POLLINATIONS_ADS_KEY": "ads-key"}, clear=True):
+            agent = AdImageAgent()
+        self.assertEqual(agent.api_key, "ads-key")
+
+    def test_missing_key_is_honest(self):
+        import asyncio as _a
+        from vektorflow_agents import AdImageAgent
+        with mock.patch.dict(os.environ, {}, clear=True):
+            agent = AdImageAgent()
+        with self.assertRaises(RuntimeError) as ctx:
+            _a.run(agent.generate_image("a dog toy"))
+        self.assertIn("not configured", str(ctx.exception))
