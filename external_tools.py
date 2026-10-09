@@ -41,6 +41,13 @@ TOOL_CATALOG = {
         "free_for_dev": True,
         "description": "Fetch/render web pages for competitive research and content extraction.",
     },
+    "serper_search": {
+        "provider": "Serper (Google)",
+        "category": "search",
+        "env": "SERPER_API_KEY",
+        "free_for_dev": True,
+        "description": "Google search results via serper.dev — the freshest general web index.",
+    },
 }
 
 
@@ -80,6 +87,29 @@ async def brave_search(query: str, count: int = 10) -> dict[str, Any]:
             "description": item.get("description"),
         })
     return {"provider": "brave", "query": query, "results": results}
+
+
+async def serper_search(query: str, count: int = 10) -> dict[str, Any]:
+    query = query.strip()
+    if not query:
+        raise ValueError("query is required")
+    api_key = _require("serper_search")
+    async with httpx.AsyncClient(timeout=30) as client:
+        response = await client.post(
+            "https://google.serper.dev/search",
+            headers={"X-API-KEY": api_key, "Content-Type": "application/json"},
+            json={"q": query, "num": max(1, min(count, 10))},
+        )
+    response.raise_for_status()
+    data = response.json()
+    results = []
+    for item in data.get("organic", [])[:count]:
+        results.append({
+            "title": item.get("title"),
+            "url": item.get("link"),
+            "description": item.get("snippet"),
+        })
+    return {"provider": "serper", "query": query, "results": results}
 
 
 async def tavily_search(query: str, max_results: int = 10) -> dict[str, Any]:

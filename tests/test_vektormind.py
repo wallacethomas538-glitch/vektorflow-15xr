@@ -146,3 +146,58 @@ class AdSpecialistKeyTests(unittest.TestCase):
         with self.assertRaises(RuntimeError) as ctx:
             _a.run(agent.generate_image("a dog toy"))
         self.assertIn("not configured", str(ctx.exception))
+
+
+class NeedsWebTests(unittest.TestCase):
+    def test_weather_needs_web(self):
+        self.assertTrue(vm.needs_web("Need to know what the weather is like. Use the Internet to find out"))
+
+    def test_can_you_use_internet(self):
+        self.assertTrue(vm.needs_web("Can you use the Internet?"))
+
+    def test_latest_news_needs_web(self):
+        self.assertTrue(vm.needs_web("What's the latest news on hydroponic tomatoes?"))
+
+    def test_store_question_no_web(self):
+        self.assertFalse(vm.needs_web("How many products are in my store?"))
+
+    def test_url_goes_to_browse_not_search(self):
+        self.assertFalse(vm.needs_web("read https://example.com please"))
+
+    def test_plain_chat_no_web(self):
+        self.assertFalse(vm.needs_web("Write me a product description for a dog toy"))
+
+
+class SerperProviderTests(unittest.IsolatedAsyncioTestCase):
+    async def test_serper_first_when_configured(self):
+        async def fake_serper(query, count=10):
+            return {"provider": "serper", "query": query,
+                    "results": [{"title": "G", "url": "https://g.co", "description": "S"}]}
+        with mock.patch.dict(os.environ, {"SERPER_API_KEY": "k", "BRAVE_SEARCH_API_KEY": "k"}, clear=True), \
+             mock.patch.object(external_tools, "serper_search", fake_serper):
+            self.assertEqual(vm.configured_search_providers()[0], "serper")
+            data = await vm.web_search("q")
+        self.assertEqual(data["provider"], "serper")
+        self.assertEqual(data["results"][0]["url"], "https://g.co")
+
+    async def test_serper_results_normalized(self):
+        # fake at the httpx layer to exercise external_tools.serper_search itself
+        class R:
+            def raise_for_status(self): pass
+            def json(self):
+                return {"organic": [{"title": "T", "link": "https://x.co", "snippet": "snip"}]}
+        class C:
+            def __init__(self, *a, **k): pass
+            async def __aenter__(self): return self
+            async def __aexit__(self, *a): return False
+            async def post(self, url, headers=None, json=None): return R()
+        with mock.patch.dict(os.environ, {"SERPER_API_KEY": "k"}, clear=True), \
+             mock.patch.object(external_tools.httpx, "AsyncClient", C):
+            data = await external_tools.serper_search("tomatoes")
+        self.assertEqual(data["provider"], "serper")
+        self.assertEqual(data["results"][0], {"title": "T", "url": "https://x.co", "description": "snip"})
+
+    def test_tool_status_lists_serper(self):
+        with mock.patch.dict(os.environ, {"SERPER_API_KEY": "k"}, clear=True):
+            rows = {r["provider"]: r["configured"] for r in external_tools.tool_status()}
+        self.assertTrue(rows["Serper (Google)"])

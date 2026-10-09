@@ -93,9 +93,12 @@ def extract_urls(text: str) -> list[str]:
 
 
 def configured_search_providers() -> list[str]:
-    """Search providers whose env key is set, in VektorMind's try-order."""
+    """Search providers whose env key is set, in VektorMind's try-order.
+    Serper (Google results) first when configured, then Brave, then Tavily."""
     status = {row["provider"]: row for row in external_tools.tool_status()}
     order = []
+    if status.get("Serper (Google)", {}).get("configured"):
+        order.append("serper")
     if status.get("Brave Search API", {}).get("configured"):
         order.append("brave")
     if status.get("Tavily", {}).get("configured"):
@@ -116,7 +119,10 @@ async def web_search(query: str, count: int = 5) -> dict[str, Any]:
     errors: list[str] = []
     for provider in providers:
         try:
-            if provider == "brave":
+            if provider == "serper":
+                data = await external_tools.serper_search(query, count=count)
+                raw = data.get("results") or []
+            elif provider == "brave":
                 data = await external_tools.brave_search(query, count=count)
                 raw = data.get("results") or []
             else:
@@ -180,3 +186,28 @@ async def browse_url(url: str, question: str | None = None) -> dict[str, Any]:
         "url": str(response.url),
         "content": content[:MAX_PAGE_CHARS],
     }
+
+
+_WEB_INTENT = re.compile(
+    r"(?i)\b("
+    r"weather|forecast|temperature outside|rain|snow|storm|hurricane|"
+    r"news|headline|latest|breaking|just announced|"
+    r"stock price|share price|price of|how much is|bitcoin|"
+    r"score|who won|standings|game tonight|"
+    r"use the internet|search the web|search for|look up|find out|google it|"
+    r"current|recently|right now|today'?s|this week|this month|2025|2026"
+    r")\b"
+)
+
+
+def needs_web(message: str) -> bool:
+    """True when the message asks for live/current external information —
+    the cases where a chat model without web context would fall back to
+    stale training data or deny it can browse. Conservative on purpose:
+    store ops and agent dispatch never route through here."""
+    text = (message or "").strip()
+    if not text:
+        return False
+    if extract_urls(text):
+        return False  # browsing path handles links
+    return bool(_WEB_INTENT.search(text))
