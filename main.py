@@ -22,6 +22,7 @@ from inventory import check_inventory, get_inventory_alerts, get_reorder_recomme
 from campaign import generate_campaign
 from organic_content import generate_organic_content
 from mission_control_api import router as mission_control_router
+import vektormind as vm
 from memory_api import router as memory_router
 from ai_observability import observability_status
 from workflow_runs import new_run as _new_workflow_run, get_run as _get_workflow_run, \
@@ -58,6 +59,10 @@ class AIChatMessage(BaseModel):
     conversation_id: Optional[str] = None
     temperature: Optional[float] = None
     search: bool = False
+    # VektorMind capabilities: name an agent to dispatch (or write
+    # "dispatch Rook to ..." / "@Rook ..."), and browse a pasted URL.
+    agent: Optional[str] = None
+    browse: bool = False
 class ProductInput(BaseModel):
     product_title: str
     supplier_description: str
@@ -335,24 +340,91 @@ async def run_team(request: TeamRunRequest, wait: bool = False):
     except Exception as e:
         logger.error("Team run error: %s",e); raise HTTPException(status_code=500,detail=str(e))
 
+def _agent_result_text(result) -> str:
+    """Best readable text from an agent run result (its real output)."""
+    if isinstance(result, str):
+        return result.strip()
+    if isinstance(result, dict):
+        if result.get("blocked"):
+            return "That agent is stopped by the kill switch right now, so it did not run."
+        for key in ("message", "response", "summary", "output"):
+            value = result.get(key)
+            if isinstance(value, str) and value.strip():
+                return value.strip()
+        if result.get("status") == "failed":
+            return f"The agent run failed: {result.get('error', 'unknown error')}"
+        return json.dumps(result, default=str)[:4000]
+    return str(result)[:4000]
+
+
+async def _dispatch_via_chat(agent_name: str, task: str, message: AIChatMessage):
+    """VektorMind dispatch: run one named agent through the same context
+    build as /api/agents/{name}/chat and present its answer, attributed."""
+    from vektorflow_agents import AgentContext
+    canonical = vm.resolve_agent_name(agent_name)
+    base = {"search_used": False, "sources": [], "timestamp": datetime.utcnow().isoformat()}
+    if not canonical:
+        return {"status": "success", **base, "dispatched_agent": None,
+                "response": (f"I don't have an agent named '{agent_name}'. "
+                             f"The 15 agents I can dispatch are: {', '.join(vm.roster())}.")}
+    agent = get_orchestrator().get_agent(canonical)
+    if not agent:
+        return {"status": "success", **base, "dispatched_agent": None,
+                "response": f"{canonical} is not registered on the backend right now."}
+    email = message.email or "commander@vektorflow.com"
+    params = {"conversation_mode": "vektormind_dispatch", "dispatched_by": "VektorMind",
+              "agent_name": agent.name}
+    context = AgentContext(email=email, user=get_user(email) or {}, stores=get_user_stores(email) or [],
+                           llm_keys=get_llm_keys(email) or {}, icp=get_icp_data(email) or {},
+                           memory=get_all_memory(email) or {}, params=params, conversation_history=[])
+    try:
+        result = await asyncio.wait_for(agent.run(context, task), timeout=150)
+    except asyncio.TimeoutError:
+        return {"status": "success", **base, "dispatched_agent": canonical,
+                "dispatch_error": "timeout",
+                "response": f"{canonical} did not finish within 150 seconds, so I stopped waiting. Nothing was approved or sent on its behalf."}
+    except Exception as e:
+        logger.error("VektorMind dispatch error: %s", e)
+        return {"status": "success", **base, "dispatched_agent": canonical,
+                "dispatch_error": str(e),
+                "response": f"{canonical} hit an error and did not complete: {e}"}
+    return {"status": "success", **base, "dispatched_agent": canonical,
+            "agent_status": result.get("status") if isinstance(result, dict) else None,
+            "response": _agent_result_text(result)}
+
+
 @app.post("/api/ai/chat")
 async def ai_chat(message: AIChatMessage):
     try:
         temperature=_validate_temperature(message.temperature)
+
+        # 1) Agent dispatch: explicit field, or a named dispatch in the text
+        #    ("dispatch Rook to ...", "@Scout ...", "ask Echo to ...").
+        dispatch = None
+        if message.agent:
+            dispatch = {"agent": message.agent, "task": message.message}
+        else:
+            dispatch = vm.parse_dispatch(message.message)
+        if dispatch:
+            return await _dispatch_via_chat(dispatch["agent"], dispatch["task"], message)
+
         prompt=message.message
         search_used=False
         sources=[]
         search_note=None
+        browsed=[]
+        browse_note=None
+
+        # 2) Real web search — whichever provider key is configured (Brave,
+        #    then Tavily). Never fabricate results.
         if message.search:
-            # Real web search via Brave; never fabricate results.
             try:
-                from external_tools import brave_search as _web_search
-                data=await _web_search(message.message,count=5)
+                data=await vm.web_search(message.message,count=5)
                 hits=(data.get("results") or [])[:5]
                 if hits:
                     lines=[f"- {h.get('title','')} ({h.get('url','')})\n  {h.get('description','')}" for h in hits]
                     today=datetime.utcnow().strftime("%Y-%m-%d")
-                    prompt=(f"Current web context (dated {today}):\n" + "\n".join(lines)
+                    prompt=(f"Current web context (dated {today}, provider: {data.get('provider','')}):\n" + "\n".join(lines)
                             + f"\n\nUser question: {message.message}\n"
                             + "Answer using the web context above where relevant. Cite sources by title.")
                     sources=[{"title":h.get("title",""),"url":h.get("url","")} for h in hits]
@@ -360,22 +432,44 @@ async def ai_chat(message: AIChatMessage):
                 else:
                     search_note="Web search returned no results; answering without web context."
             except RuntimeError as e:
-                # Brave API key not configured — degrade gracefully, never fake it.
+                # No search provider configured — degrade honestly, never fake it.
                 logger.warning("AI chat web search unavailable: %s",e)
-                search_note="Web search is not configured on the backend; answering without web context."
+                search_note=str(e) + " Answering without web context."
             except Exception as e:
                 logger.warning("AI chat web search failed: %s",e)
                 search_note="Web search failed; answering without web context."
+
+        # 3) Browse: read a pasted URL server-side (WebScraping.AI when
+        #    configured, else direct fetch) and answer from its real content.
+        browse_targets = vm.extract_urls(message.message)[:1]
+        if message.browse and not browse_targets and sources:
+            browse_targets = [sources[0]["url"]]
+        for target in browse_targets:
+            try:
+                page = await vm.browse_url(target)
+                if page.get("content"):
+                    prompt = (f"Content read from {page.get('url', target)} "
+                              f"(via {page.get('provider','')}):\n{page['content']}\n\n"
+                              f"User message: {message.message}\n"
+                              "Answer from the page content above where relevant, and say so when you do.")
+                    browsed.append({"url": page.get("url", target), "provider": page.get("provider", "")})
+            except Exception as e:
+                logger.warning("AI chat browse failed for %s: %s", target, e)
+                browse_note = f"Could not browse {target} ({e}); answering without its content."
+
         result=await call_llm(prompt=prompt,model=DEFAULT_MODEL,user_keys=get_llm_keys(message.email or "commander@vektorflow.com"),temperature=temperature)
         resp={"status":"success","response":result.get("response","I'm here to help."),"timestamp":datetime.utcnow().isoformat(),
-              "search_used":search_used,"sources":sources}
+              "search_used":search_used,"sources":sources,"browsed":browsed}
         if search_note:
             resp["search_note"]=search_note
+        if browse_note:
+            resp["browse_note"]=browse_note
         return resp
     except HTTPException:
         raise
     except Exception as e:
         logger.error("AI chat error: %s",e); raise HTTPException(status_code=500,detail=str(e))
+
 
 @app.get("/api/ai/debug")
 async def ai_debug():
