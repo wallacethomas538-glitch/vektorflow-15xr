@@ -415,9 +415,12 @@ async def ai_chat(message: AIChatMessage):
         browsed=[]
         browse_note=None
 
-        # 2) Real web search — whichever provider key is configured (Brave,
-        #    then Tavily). Never fabricate results.
-        if message.search:
+        # 2) Real web search — whichever provider key is configured (Serper/
+        #    Google, then Brave, then Tavily). Fires on the explicit flag OR
+        #    when the message asks for live info ("weather", "latest news",
+        #    "use the Internet") — the chat screen sends no flag.
+        searched_provider = None
+        if message.search or vm.needs_web(message.message):
             try:
                 data=await vm.web_search(message.message,count=5)
                 hits=(data.get("results") or [])[:5]
@@ -429,6 +432,7 @@ async def ai_chat(message: AIChatMessage):
                             + "Answer using the web context above where relevant. Cite sources by title.")
                     sources=[{"title":h.get("title",""),"url":h.get("url","")} for h in hits]
                     search_used=True
+                    searched_provider = data.get("provider")
                 else:
                     search_note="Web search returned no results; answering without web context."
             except RuntimeError as e:
@@ -457,9 +461,22 @@ async def ai_chat(message: AIChatMessage):
                 logger.warning("AI chat browse failed for %s: %s", target, e)
                 browse_note = f"Could not browse {target} ({e}); answering without its content."
 
-        result=await call_llm(prompt=prompt,model=DEFAULT_MODEL,user_keys=get_llm_keys(message.email or "commander@vektorflow.com"),temperature=temperature)
+        preface = (
+            "You are VektorMind, the command-center mind of VektorFlow 15XR. "
+            "Server-side tools give you live web abilities: you can search the web "
+            "(Serper/Google, Brave, Tavily) and read web pages, and you can dispatch "
+            "any of the 15 VektorFlow agents. Web results and page content are attached "
+            "above the commander's message when a search or browse ran. Answer from that "
+            "attached context whenever present and cite sources by title. "
+            "NEVER claim you cannot browse the internet, cannot access live information, "
+            "or that your knowledge is cut off at a fixed date — those abilities run on "
+            "the server around you. If the commander asks for current information and no "
+            "web context is attached, say plainly that no web context came back this turn "
+            "(the screen shows the reason) instead of inventing facts.\n\n"
+        )
+        result=await call_llm(prompt=preface + prompt,model=DEFAULT_MODEL,user_keys=get_llm_keys(message.email or "commander@vektorflow.com"),temperature=temperature)
         resp={"status":"success","response":result.get("response","I'm here to help."),"timestamp":datetime.utcnow().isoformat(),
-              "search_used":search_used,"sources":sources,"browsed":browsed}
+              "search_used":search_used,"sources":sources,"browsed":browsed,"searched_provider":searched_provider}
         if search_note:
             resp["search_note"]=search_note
         if browse_note:
