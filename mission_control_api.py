@@ -15,6 +15,8 @@ from mission_control import (
     transition_mission,
     add_task,
     list_tasks,
+    transition_task,
+    set_mission_result,
     propose_action,
     get_action_proposal,
     list_pending_actions,
@@ -126,11 +128,7 @@ async def plan_mission(mission_id: str, email: str = "commander@vektorflow.com")
         existing = list_tasks(mission_id)
         plan = build_mission_plan(mission["objective"], mission.get("constraints") or {})
         if not existing:
-            task_lookup = {}
-            for spec in plan["tasks"]:
-                deps = [task_lookup[d] for d in spec["dependencies"] if d in task_lookup]
-                created = add_task(mission_id, spec["agent"], spec["instruction"], deps, spec["risk"])
-                task_lookup[spec["id"]] = created["id"]
+            _create_plan_tasks(mission_id, plan)
         if get_mission(mission_id, email)["state"] == "planning":
             transition_mission(
                 mission_id, "ready", "mission-planner", email,
@@ -146,8 +144,171 @@ async def plan_mission(mission_id: str, email: str = "commander@vektorflow.com")
         raise HTTPException(409, str(exc))
 
 
+def _create_plan_tasks(mission_id: str, plan: Dict[str, Any]) -> List[Dict[str, Any]]:
+    """Create mission_tasks rows from a planner plan, translating spec ids to real task ids."""
+    task_lookup: Dict[str, str] = {}
+    for spec in plan["tasks"]:
+        deps = [task_lookup[d] for d in spec["dependencies"] if d in task_lookup]
+        created = add_task(mission_id, spec["agent"], spec["instruction"], deps, spec["risk"])
+        task_lookup[spec["id"]] = created["id"]
+    return list_tasks(mission_id)
+
+
+def _dependency_order(tasks: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Order tasks so every task runs after its dependencies (planner DAG).
+
+    Dependencies reference real task ids. Unknown dep ids are ignored;
+    a cycle degrades to plan order rather than deadlocking.
+    """
+    by_id = {t["id"]: t for t in tasks}
+    ordered: List[Dict[str, Any]] = []
+    placed = set()
+    remaining = list(tasks)
+    while remaining:
+        progressed = False
+        for task in list(remaining):
+            deps = task.get("dependencies") or []
+            if all(d in placed or d not in by_id for d in deps):
+                ordered.append(task)
+                placed.add(task["id"])
+                remaining.remove(task)
+                progressed = True
+        if not progressed:
+            task = remaining.pop(0)
+            ordered.append(task)
+            placed.add(task["id"])
+    return ordered
+
+
+# Agent outputs that prove nothing was actually done. A task may only be
+# marked completed when its agent produced real evidence — never on one of
+# these placeholders.
+_EMPTY_AGENT_MESSAGES = {
+    "i am ready to help, but i do not have enough information to answer that yet.",
+}
+
+
+# Tools that only re-read shared context: they never count as the agent's own work.
+_CONTEXT_READ_TOOLS = {"read_team_results", "read_memory"}
+
+
+def _agent_work_succeeded(agent_result: Any) -> tuple:
+    """Decide whether an agent's returned payload counts as real completed work.
+
+    Returns (ok, reason). agent.run() itself never raises for agent-level
+    failures — it returns an honest error/blocked dict — so this guard is what
+    stops an empty, placeholder, or work-free response from being recorded as
+    completed. Merely re-reading shared team context is not work.
+    """
+    if not isinstance(agent_result, dict):
+        text = str(agent_result or "").strip()
+        return (bool(text), "" if text else "agent returned no usable output")
+    status = str(agent_result.get("status", "")).lower()
+    error = agent_result.get("error")
+    if status in {"failed", "blocked"} or error:
+        return False, str(error or f"agent reported status '{status or 'unknown'}'")
+    message = str(agent_result.get("message", "")).strip()
+    if message and message.lower() not in _EMPTY_AGENT_MESSAGES:
+        return True, ""
+    if message:
+        # Non-empty but a known placeholder response.
+        return False, "agent returned a placeholder response instead of doing the work"
+    own_output = (
+        agent_result.get("evidence")
+        or agent_result.get("data")
+        or agent_result.get("actions")
+        or agent_result.get("handoff")
+    )
+    if own_output:
+        return True, ""
+    tool_calls = agent_result.get("tool_calls") or []
+    real_tool_work = any(
+        isinstance(tc, dict)
+        and tc.get("status") == "completed"
+        and tc.get("tool") not in _CONTEXT_READ_TOOLS
+        for tc in tool_calls
+    )
+    if real_tool_work:
+        return True, ""
+    return False, "agent completed with no message and no evidence of its own work"
+
+
+async def _execute_mission_task(orchestrator, context, mission_id: str, objective: str,
+                               task: Dict[str, Any], outcomes: Dict[str, str]) -> None:
+    """Run ONE planned task through its real agent and persist the real outcome.
+
+    Transitions the task row pending -> running -> completed/failed and stores
+    the agent's actual output as the task result. A task is only marked
+    completed when its agent genuinely did the work.
+    """
+    task_id = task["id"]
+    agent_name = task.get("agent") or ""
+    agent = orchestrator.get_agent(agent_name)
+    if agent is None:
+        transition_task(task_id, "failed", actor="mission-control", result={
+            "agent": agent_name,
+            "error": f"Unknown agent '{agent_name}': not on the 15-agent roster, so no work was done.",
+        })
+        outcomes[task_id] = "failed"
+        return
+
+    transition_task(task_id, "running", actor="mission-control")
+    context.params = {**(context.params or {}), "task_id": task_id}
+
+    failed_deps = [d for d in (task.get("dependencies") or []) if outcomes.get(d) == "failed"]
+    dep_note = ""
+    if failed_deps:
+        dep_note = (f"\n\nNote: these earlier tasks failed: {', '.join(failed_deps)}. "
+                    f"Do your part with the evidence that IS available and state clearly what is missing.")
+
+    instruction = (
+        f"Mission objective: {objective}\n\n"
+        f"Your assigned task: {task.get('instruction', '')}{dep_note}\n\n"
+        f"Do the work for THIS task now. Return concrete findings, actions taken, "
+        f"and evidence. Never claim work was completed unless you actually perform it."
+    )
+    agent_result = await agent.run(context, instruction)
+
+    ok, reason = _agent_work_succeeded(agent_result)
+    # The shared team record carries the adjudicated outcome — never a raw
+    # placeholder masquerading as good evidence for downstream agents.
+    recorded = {
+        "agent": agent_name,
+        "task_status": "completed" if ok else "failed",
+        "outcome": agent_result,
+    }
+    if ok:
+        transition_task(task_id, "completed", actor="mission-control", result=recorded)
+        outcomes[task_id] = "completed"
+    else:
+        recorded["error"] = reason
+        transition_task(task_id, "failed", actor="mission-control", result=recorded)
+        outcomes[task_id] = "failed"
+    context.results[agent_name.lower()] = recorded
+
+
+def _best_effort(label: str, fn, default):
+    """Run a context lookup; on failure return the default and keep going.
+
+    Enrichment (memory, stores, keys) must never kill a mission run — the team
+    works with whatever context is actually available.
+    """
+    try:
+        value = fn()
+        return value if value is not None else default
+    except Exception as exc:
+        print(f"[mission-control] context '{label}' unavailable ({exc}); continuing without it")
+        return default
+
+
 async def _run_mission_team(mission_id: str, email: str):
-    """Run the 15-agent team for a mission; land it in completed/failed. Shared by both execute modes."""
+    """Run the 15-agent team task-by-task through the real orchestrator.
+
+    Each planned task row transitions pending -> running -> completed/failed as
+    its assigned agent genuinely does the work, in planner dependency order.
+    The mission-level result is synthesized from the real per-task records.
+    Shared by both execute modes.
+    """
     mission = get_mission(mission_id, email)
     objective = (mission or {}).get("objective", "")
     try:
@@ -155,19 +316,54 @@ async def _run_mission_team(mission_id: str, email: str):
         from database import get_user, get_user_stores, get_llm_keys, get_icp_data, get_all_memory
         context = AgentContext(
             email=email,
-            user=get_user(email) or {},
-            stores=get_user_stores(email) or [],
-            llm_keys=get_llm_keys(email) or {},
-            icp=get_icp_data(email) or {},
-            memory=get_all_memory(email) or {},
+            user=_best_effort("user", lambda: get_user(email), {}),
+            stores=_best_effort("stores", lambda: get_user_stores(email), []),
+            llm_keys=_best_effort("llm_keys", lambda: get_llm_keys(email), {}),
+            icp=_best_effort("icp", lambda: get_icp_data(email), {}),
+            memory=_best_effort("memory", lambda: get_all_memory(email), {}),
             params={"mission_id": mission_id, "mission": mission},
         )
+        tasks = list_tasks(mission_id)
+        if not tasks:
+            # Approved without a plan: build the canonical 15-agent plan now
+            # so there are real task rows for the team to execute.
+            plan = build_mission_plan(objective, (mission or {}).get("constraints") or {})
+            tasks = _create_plan_tasks(mission_id, plan)
+        orchestrator = get_orchestrator()
+        outcomes: Dict[str, str] = {}
         with start_span("vektorflow.mission", {"vf.mission_id": mission_id, "vf.workflow_id": mission_id, "vf.objective": objective}):
-            result = await get_orchestrator().team_execute(objective, context)
-        transition_mission(mission_id, "completed", "mission-control", email, {"agent_count": 15})
+            for task in _dependency_order(tasks):
+                await _execute_mission_task(orchestrator, context, mission_id, objective, task, outcomes)
+        final_tasks = list_tasks(mission_id)
+        failed = [t for t in final_tasks if t["status"] == "failed"]
+        completed = [t for t in final_tasks if t["status"] == "completed"]
+        result = {
+            "status": "failed" if failed else "completed",
+            "goal": objective,
+            "task_count": len(final_tasks),
+            "completed_count": len(completed),
+            "failed_count": len(failed),
+            "failed_tasks": [
+                {"task_id": t["id"], "agent": t.get("agent"),
+                 "error": (t.get("result") or {}).get("error")}
+                for t in failed
+            ],
+            "tasks": [
+                {"task_id": t["id"], "agent": t.get("agent"),
+                 "instruction": t.get("instruction"), "status": t.get("status"),
+                 "result": t.get("result")}
+                for t in final_tasks
+            ],
+        }
+        set_mission_result(mission_id, result)
+        transition_mission(
+            mission_id, "failed" if failed else "completed", "mission-control", email,
+            {"task_count": len(final_tasks), "completed": len(completed), "failed": len(failed)},
+        )
         return result
     except Exception as exc:
         try:
+            set_mission_result(mission_id, {"status": "failed", "goal": objective, "error": str(exc)})
             transition_mission(mission_id, "failed", "mission-control", email, {"error": str(exc)})
         except Exception:
             pass
