@@ -17,7 +17,7 @@ import httpx
 from pydantic import BaseModel, ValidationError
 
 from database import (
-    get_user_stores,
+    get_user_stores as db_get_user_stores,
     connect_store as db_connect_store,
     save_memory,
     get_memory,
@@ -710,7 +710,7 @@ def connect_store(email: str, platform: str, store_url: str) -> Dict:
 
 def get_user_stores(email: str) -> List[Dict]:
     """Get user stores - wrapper for database function."""
-    return get_user_stores(email)
+    return db_get_user_stores(email)
 
 # ============ INITIALIZATION ============
 

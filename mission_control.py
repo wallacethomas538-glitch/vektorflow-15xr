@@ -151,6 +151,7 @@ def init_mission_control() -> None:
             state TEXT NOT NULL DEFAULT 'draft',
             workflow TEXT NOT NULL DEFAULT '{}',
             metadata TEXT NOT NULL DEFAULT '{}',
+            result TEXT NOT NULL DEFAULT '{}',
             created_at TEXT NOT NULL,
             updated_at TEXT NOT NULL,
             completed_at TEXT
@@ -203,12 +204,30 @@ def init_mission_control() -> None:
         """
     )
     conn.commit()
+    _ensure_mission_result_column(conn, _pg)
     global _reaped_stale_missions
     if not _reaped_stale_missions:
         _reaped_stale_missions = True
         _reap_stale_missions(cur)
         conn.commit()
     conn.close()
+
+
+def _ensure_mission_result_column(conn, _pg) -> None:
+    """Migration: add missions.result to databases created before it existed.
+
+    CREATE TABLE IF NOT EXISTS will not add the column to existing tables,
+    so ALTER it in. Safe to run repeatedly.
+    """
+    cur = _cursor(conn, _pg)
+    try:
+        cur.execute("ALTER TABLE missions ADD COLUMN result TEXT NOT NULL DEFAULT '{}'")
+        conn.commit()
+    except Exception:
+        try:
+            conn.rollback()
+        except Exception:
+            pass
 
 
 def _reap_stale_missions(cur) -> None:
@@ -368,6 +387,76 @@ def list_tasks(mission_id: str) -> List[Dict[str, Any]]:
     rows = cur.fetchall()
     conn.close()
     return [_row(row) for row in rows]
+
+
+TASK_STATES = ["pending", "running", "completed", "failed", "cancelled"]
+
+ALLOWED_TASK_TRANSITIONS = {
+    # pending -> failed is allowed for dependency-skip: a task whose dependency
+    # failed may be recorded as failed without its agent running.
+    "pending": {"running", "failed", "cancelled"},
+    "running": {"completed", "failed", "cancelled"},
+    "failed": {"running"},  # retry
+    "completed": set(),
+    "cancelled": set(),
+}
+
+
+def transition_task(
+    task_id: str,
+    to_state: str,
+    actor: str = "mission-control",
+    result: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    """Move a mission task through pending -> running -> completed/failed.
+
+    The result payload is the agent's real output/evidence for that task.
+    No task may be marked completed without its agent having done the work —
+    callers must only complete a task after the assigned agent actually ran.
+    """
+    if to_state not in TASK_STATES:
+        raise ValueError(f"Unknown task state: {to_state}")
+    init_mission_control()
+    task = get_task(task_id)
+    if not task:
+        raise ValueError("Task not found")
+    from_state = task["status"]
+    if to_state not in ALLOWED_TASK_TRANSITIONS.get(from_state, set()):
+        raise ValueError(f"Invalid task transition: {from_state} -> {to_state}")
+    now = _now()
+    conn, _pg = _open_db()
+    cur = _cursor(conn, _pg)
+    if result is None:
+        cur.execute(
+            "UPDATE mission_tasks SET status = ?, updated_at = ? WHERE id = ?",
+            (to_state, now, task_id),
+        )
+    else:
+        cur.execute(
+            "UPDATE mission_tasks SET status = ?, result = ?, updated_at = ? WHERE id = ?",
+            (to_state, _json(result), now, task_id),
+        )
+    _audit(cur, task["mission_id"], actor, "task.transitioned", {
+        "task_id": task_id, "agent": task.get("agent"), "to_state": to_state,
+    }, from_state, to_state)
+    conn.commit()
+    conn.close()
+    return get_task(task_id)
+
+
+def set_mission_result(mission_id: str, result: Dict[str, Any], actor: str = "mission-control") -> Dict[str, Any]:
+    """Persist the team's real execution result onto the mission record."""
+    init_mission_control()
+    conn, _pg = _open_db()
+    cur = _cursor(conn, _pg)
+    cur.execute(
+        "UPDATE missions SET result = ?, updated_at = ? WHERE id = ?",
+        (_json(result or {}), _now(), mission_id),
+    )
+    _audit(cur, mission_id, actor, "mission.result", {"keys": sorted((result or {}).keys())})
+    conn.commit()
+    conn.close()
+    return get_mission(mission_id)
 
 
 def propose_action(

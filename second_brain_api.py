@@ -50,23 +50,43 @@ async def second_brain_chat(request: SecondBrainRequest):
 
 @router.get("/status")
 async def second_brain_status():
-    with _connect() as conn:
-        with conn.cursor() as cur:
-            cur.execute(
-                """SELECT relay_id, hostname, status, executors, last_seen_at, version
-                   FROM public.termux_relays ORDER BY last_seen_at DESC LIMIT 1"""
-            )
-            row = cur.fetchone()
-            relay = None
-            if row:
-                cols = [d.name for d in cur.description]
-                relay = dict(zip(cols, row))
-            cur.execute(
-                """SELECT status, count(*) AS count FROM public.termux_jobs
-                   GROUP BY status ORDER BY status"""
-            )
-            jobs = [{"status": r[0], "count": r[1]} for r in cur.fetchall()]
-    return {"status": "success", "relay": relay, "jobs": jobs}
+    """Report the real Termux relay state.
+
+    Never 500s on missing config or missing data: when the relay database is
+    unreachable (or the migration was never applied) the honest answer is
+    "no relay state available", not an exception.
+    """
+    try:
+        with _connect() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """SELECT relay_id, hostname, status, executors, last_seen_at, version
+                       FROM public.termux_relays ORDER BY last_seen_at DESC LIMIT 1"""
+                )
+                row = cur.fetchone()
+                relay = None
+                if row:
+                    cols = [d.name for d in cur.description]
+                    relay = dict(zip(cols, row))
+                cur.execute(
+                    """SELECT status, count(*) AS count FROM public.termux_jobs
+                       GROUP BY status ORDER BY status"""
+                )
+                jobs = [{"status": r[0], "count": r[1]} for r in cur.fetchall()]
+    except Exception as exc:
+        return {
+            "status": "success",
+            "relay": None,
+            "jobs": [],
+            "relay_online": False,
+            "error": f"Relay state unavailable: {exc}",
+        }
+    return {
+        "status": "success",
+        "relay": relay,
+        "jobs": jobs,
+        "relay_online": bool(relay and relay.get("status") == "online"),
+    }
 
 @router.post("/relay/heartbeat")
 async def relay_heartbeat(payload: RelayHeartbeat, x_termux_relay_token: Optional[str] = Header(None)):
