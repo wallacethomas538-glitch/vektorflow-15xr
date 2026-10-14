@@ -24,6 +24,8 @@ from mission_control import (
     get_audit,
     mission_summary,
     init_mission_control,
+    _open_db,
+    _cursor,
 )
 
 router = APIRouter(prefix="/api/v1/mission-control", tags=["mission-control"])
@@ -73,6 +75,37 @@ class ActionDecision(BaseModel):
 @router.on_event("startup")
 async def startup():
     init_mission_control()
+    _resume_approved_missions()
+
+
+def _approved_missions_pending():
+    """(id, email) pairs for missions stuck in 'approved' without execution.
+
+    Approvals used to only flip the state flag, so missions approved before the
+    auto-execute fix (or stranded by a restart) sit in 'approved' forever.
+    """
+    conn, _pg = _open_db()
+    cur = _cursor(conn, _pg)
+    try:
+        cur.execute("SELECT id, email FROM missions WHERE state = 'approved'")
+        rows = cur.fetchall() or []
+        return [
+            (r["id"], r["email"]) if isinstance(r, dict) else (r[0], r[1])
+            for r in rows
+        ]
+    except Exception:
+        return []
+    finally:
+        try:
+            conn.close()
+        except Exception:
+            pass
+
+
+def _resume_approved_missions() -> None:
+    """Launch background execution for approved-but-never-executed missions."""
+    for mission_id, email in _approved_missions_pending():
+        asyncio.create_task(_execute_mission_background(mission_id, email))
 
 
 @router.get("/summary")
@@ -109,11 +142,18 @@ async def detail(mission_id: str, email: str = "commander@vektorflow.com"):
 @router.post("/missions/{mission_id}/transition")
 async def transition(mission_id: str, data: TransitionRequest):
     try:
-        return {"status": "success", "mission": transition_mission(
+        mission = transition_mission(
             mission_id, data.to_state, data.actor, data.email, data.details
-        )}
+        )
     except ValueError as exc:
         raise HTTPException(409, str(exc))
+    # Approval now kicks off real execution: the 15-agent team runs in the
+    # background and the mission record carries the honest per-task outcome,
+    # instead of sitting in 'approved' with nothing happening.
+    if mission.get("state") == "approved":
+        asyncio.create_task(_execute_mission_background(mission_id, data.email))
+        mission = get_mission(mission_id, data.email)
+    return {"status": "success", "mission": mission}
 
 
 @router.post("/missions/{mission_id}/plan")
