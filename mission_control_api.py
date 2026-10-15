@@ -282,6 +282,11 @@ async def _execute_mission_task(orchestrator, context, mission_id: str, objectiv
     completed when its agent genuinely did the work.
     """
     task_id = task["id"]
+    if task.get("status") == "completed":
+        # Idempotent re-run: real work was already done and recorded on an
+        # earlier run. Keep the result, do not redo or fake anything.
+        outcomes[task_id] = "completed"
+        return
     agent_name = task.get("agent") or ""
     agent = orchestrator.get_agent(agent_name)
     if agent is None:
@@ -369,6 +374,24 @@ async def _run_mission_team(mission_id: str, email: str):
             # so there are real task rows for the team to execute.
             plan = build_mission_plan(objective, (mission or {}).get("constraints") or {})
             tasks = _create_plan_tasks(mission_id, plan)
+        else:
+            # Re-run safety: reconcile task rows left over from an earlier
+            # interrupted run. Leftover "pending" tasks run as-is. Anything
+            # non-terminal (failed / cancelled / running-stuck-after-crash)
+            # is requeued to pending for an honest retry through the normal
+            # flow. Tasks already "completed" are left untouched — their
+            # agents genuinely did the work, so it is never redone and never
+            # faked; _execute_mission_task skips them idempotently.
+            reconciled: List[Dict[str, Any]] = []
+            for task in tasks:
+                status = task["status"]
+                if status in ("completed", "pending"):
+                    reconciled.append(task)
+                else:
+                    reconciled.append(
+                        transition_task(task["id"], "pending", actor="mission-control")
+                    )
+            tasks = reconciled
         orchestrator = get_orchestrator()
         outcomes: Dict[str, str] = {}
         with start_span("vektorflow.mission", {"vf.mission_id": mission_id, "vf.workflow_id": mission_id, "vf.objective": objective}):

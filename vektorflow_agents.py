@@ -274,7 +274,7 @@ Conversation with this agent:
 {json.dumps(context.conversation_history[-12:],default=str)}
 Respond naturally as the {self.name} agent. Do not return JSON, markdown data structures, status objects, tool metadata, or empty placeholders. Speak directly to the user like a real business specialist. Give concrete reasoning, findings, and next actions when the available evidence supports them. Be honest when required data is not available. Never claim an external action was completed unless the connected integration actually performed it."""
         result=await call_llm(prompt,DEFAULT_MODEL,context.llm_keys,context.params.get("temperature"))
-        return result.get("response","I am ready to help, but I do not have enough information to answer that yet.").strip()
+        return (result.get("response") or "I am ready to help, but I do not have enough information to answer that yet.").strip()
 
     async def _llm_structured(self,context,instruction):
         shared=json.dumps(context.results,default=str)[-12000:]

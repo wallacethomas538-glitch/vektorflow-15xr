@@ -110,7 +110,10 @@ ALLOWED_TRANSITIONS = {
     "planning": {"ready", "blocked", "failed", "cancelled"},
     "ready": {"awaiting_approval", "approved", "executing", "cancelled"},
     "awaiting_approval": {"approved", "blocked", "cancelled"},
-    "approved": {"executing", "paused", "cancelled"},
+    # approved -> failed: an execution attempt that crashes before reaching
+    # "executing" must be able to honestly record the failure instead of
+    # leaving the mission stuck in "approved" with a failed result.
+    "approved": {"executing", "paused", "failed", "cancelled"},
     "executing": {"paused", "completed", "failed", "blocked", "awaiting_approval", "cancelled"},
     "paused": {"executing", "cancelled"},
     "blocked": {"planning", "ready", "awaiting_approval", "cancelled"},
@@ -395,10 +398,14 @@ ALLOWED_TASK_TRANSITIONS = {
     # pending -> failed is allowed for dependency-skip: a task whose dependency
     # failed may be recorded as failed without its agent running.
     "pending": {"running", "failed", "cancelled"},
-    "running": {"completed", "failed", "cancelled"},
-    "failed": {"running"},  # retry
-    "completed": set(),
-    "cancelled": set(),
+    # running -> pending: requeue a task stuck after a crash/restart so a
+    # re-run can retry it honestly through the normal pending -> running flow.
+    "running": {"completed", "failed", "cancelled", "pending"},
+    # failed -> pending: clean retry of a failed task on mission re-run.
+    "failed": {"running", "pending"},
+    "completed": set(),  # real work already done and recorded: never redo, never fake
+    # cancelled -> pending: requeue a cancelled task for a fresh run.
+    "cancelled": {"pending"},
 }
 
 
