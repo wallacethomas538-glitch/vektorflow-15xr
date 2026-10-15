@@ -478,7 +478,17 @@ async def ai_chat(message: AIChatMessage):
             "(the screen shows the reason) instead of inventing facts.\n\n"
         )
         result=await call_llm(prompt=preface + prompt,model=DEFAULT_MODEL,user_keys=get_llm_keys(message.email or "commander@vektorflow.com"),temperature=temperature)
-        resp={"status":"success","response":result.get("response","I'm here to help."),"timestamp":datetime.utcnow().isoformat(),
+        if not isinstance(result, dict) or not result.get("success"):
+            provider = result.get("provider", "unknown") if isinstance(result, dict) else "unknown"
+            logger.warning("AI chat provider failed: provider=%s", provider)
+            raise HTTPException(status_code=502, detail="The AI provider did not complete the request. Please try again.")
+        response_text = result.get("response")
+        if not isinstance(response_text, str) or not response_text.strip():
+            provider = result.get("provider", "unknown")
+            model = result.get("model", DEFAULT_MODEL)
+            logger.warning("AI chat provider returned empty response: provider=%s model=%s", provider, model)
+            raise HTTPException(status_code=502, detail="The AI provider returned an empty response. Please try again.")
+        resp={"status":"success","response":response_text.strip(),"timestamp":datetime.utcnow().isoformat(),
               "search_used":search_used,"sources":sources,"browsed":browsed,"searched_provider":searched_provider}
         if search_note:
             resp["search_note"]=search_note
