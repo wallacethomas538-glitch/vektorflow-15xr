@@ -8,7 +8,7 @@ logger = logging.getLogger(__name__)
 
 
 class ShopifyIntegration:
-    def __init__(self, shop_url: str = "", access_token: str = "", api_version: str = "2024-01"):
+    def __init__(self, shop_url: str = "", access_token: str = "", api_version: str = "2026-10"):
         self.shop_url = shop_url
         self.access_token = access_token
         self.api_version = api_version

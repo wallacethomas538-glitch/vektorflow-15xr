@@ -207,7 +207,7 @@ class ShopifyAPI:
         """Get products from Shopify store."""
         try:
             response = await self.client.get(
-                f"{self.store_url}/admin/api/2023-10/products.json",
+                f"{self.store_url}/admin/api/2026-10/products.json",
                 params={"limit": limit},
                 headers=self._headers()
             )
@@ -225,7 +225,7 @@ class ShopifyAPI:
         """Get total product count from Shopify store (not page size)."""
         try:
             response = await self.client.get(
-                f"{self.store_url}/admin/api/2023-10/products/count.json",
+                f"{self.store_url}/admin/api/2026-10/products/count.json",
                 headers=self._headers()
             )
             response.raise_for_status()
@@ -238,7 +238,7 @@ class ShopifyAPI:
         """Get total order count from Shopify store (not page size)."""
         try:
             response = await self.client.get(
-                f"{self.store_url}/admin/api/2023-10/orders/count.json",
+                f"{self.store_url}/admin/api/2026-10/orders/count.json",
                 headers=self._headers()
             )
             response.raise_for_status()
@@ -251,7 +251,7 @@ class ShopifyAPI:
         """Create a product on Shopify."""
         try:
             response = await self.client.post(
-                f"{self.store_url}/admin/api/2023-10/products.json",
+                f"{self.store_url}/admin/api/2026-10/products.json",
                 json={"product": product},
                 headers=self._headers()
             )
@@ -269,7 +269,7 @@ class ShopifyAPI:
         """Update a product on Shopify."""
         try:
             response = await self.client.put(
-                f"{self.store_url}/admin/api/2023-10/products/{product_id}.json",
+                f"{self.store_url}/admin/api/2026-10/products/{product_id}.json",
                 json={"product": product},
                 headers=self._headers()
             )
@@ -287,7 +287,7 @@ class ShopifyAPI:
         """Get orders from Shopify store."""
         try:
             response = await self.client.get(
-                f"{self.store_url}/admin/api/2023-10/orders.json",
+                f"{self.store_url}/admin/api/2026-10/orders.json",
                 params={"limit": limit, "status": "any"},
                 headers=self._headers()
             )
@@ -305,7 +305,7 @@ class ShopifyAPI:
         """Get abandoned checkouts from Shopify store."""
         try:
             response = await self.client.get(
-                f"{self.store_url}/admin/api/2023-10/checkouts.json",
+                f"{self.store_url}/admin/api/2026-10/checkouts.json",
                 params={"limit": limit},
                 headers=self._headers()
             )
