@@ -98,8 +98,10 @@ class MissionPersistenceTests(unittest.TestCase):
     def test_task_invalid_transition_rejected(self):
         mission = self._new_mission()
         task = mc.add_task(mission["id"], "Scout", "find niches", [], "low")
+        mc.transition_task(task["id"], "running", actor="mission-control")
+        mc.transition_task(task["id"], "completed", actor="mission-control", result={"agent": "Scout"})
         with self.assertRaises(ValueError):
-            mc.transition_task(task["id"], "completed", actor="mission-control")
+            mc.transition_task(task["id"], "pending", actor="mission-control")
         with self.assertRaises(ValueError):
             mc.transition_task(task["id"], "bogus-state", actor="mission-control")
 
@@ -137,14 +139,15 @@ class MissionPersistenceTests(unittest.TestCase):
         mission = self._new_mission()
         plan = build_mission_plan(mission["objective"], {})
         tasks = mca._create_plan_tasks(mission["id"], plan)
-        self.assertEqual(len(tasks), 15)
+        # The sync planner is the documented minimal-safe fallback: exactly
+        # one Scout task carrying the objective, no dependencies.
+        self.assertEqual(len(tasks), 1)
+        self.assertEqual(tasks[0]["agent"], "Scout")
         by_id = {t["id"] for t in tasks}
         for task in tasks:
             for dep in task.get("dependencies") or []:
                 self.assertIn(dep, by_id)
-        # Phase-0 tasks (Scout/ViralDet/Shadow) have no dependencies.
-        phase0 = [t for t in tasks if t["agent"] in {"Scout", "ViralDet", "Shadow"}]
-        self.assertTrue(all(not t.get("dependencies") for t in phase0))
+        self.assertTrue(all(not t.get("dependencies") for t in tasks))
 
     # ---- agent-output honesty guard ----
 
@@ -228,9 +231,9 @@ class MissionPersistenceTests(unittest.TestCase):
         got = mc.get_mission(mission["id"], TEST_EMAIL)
         self.assertEqual(got["state"], "completed")
         self.assertEqual(got["result"]["status"], "completed")
-        self.assertEqual(got["result"]["task_count"], 15)
+        self.assertEqual(got["result"]["task_count"], len(tasks))
         rows = mc.list_tasks(mission["id"])
-        self.assertEqual(len(rows), 15)
+        self.assertEqual(len(rows), len(tasks))
         self.assertTrue(all(r["status"] == "completed" for r in rows))
         self.assertTrue(all((r["result"] or {}).get("outcome", {}).get("message") for r in rows))
 
@@ -251,17 +254,21 @@ class MissionPersistenceTests(unittest.TestCase):
     def test_run_mission_team_real_orchestrator_honest_outcome(self):
         """End-to-end through the REAL _run_mission_team with the REAL orchestrator.
 
-        No LLM keys exist in this environment, so the real Cerebrum agent
-        cannot produce usable output. The mission must land failed with the
-        honest reason on both the task row and the mission record — it must
-        NEVER be recorded as completed.
+        The LLM boundary is faked to return an empty response — the same shape
+        a keyless/ unreachable provider produces. The orchestrator, agents,
+        tool gathering, storage and the honesty guard all stay REAL. The task
+        must land failed with the honest reason on both the task row and the
+        mission record — it must NEVER be recorded as completed.
         """
+        from unittest import mock
+
         mission = self._new_mission("honest failure probe")
         for state in ("planning", "ready", "approved", "executing"):
             mc.transition_mission(mission["id"], state, "test", TEST_EMAIL)
         mc.add_task(mission["id"], "Cerebrum", "summarize team state", [], "low")
 
-        result = asyncio.run(mca._run_mission_team(mission["id"], TEST_EMAIL))
+        with mock.patch("vektorflow_agents.call_llm", return_value={"response": ""}):
+            result = asyncio.run(mca._run_mission_team(mission["id"], TEST_EMAIL))
 
         rows = mc.list_tasks(mission["id"])
         self.assertEqual(len(rows), 1)

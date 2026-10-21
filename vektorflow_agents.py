@@ -522,6 +522,9 @@ class Orchestrator:
     def get_agent(self,name): return self.agents.get(name.lower())
     def roster(self): return [a.summary() for a in self.agents.values()]
     async def team_execute(self,goal,context,cancel_event=None):
+        return await self._run_mission_team(goal, context, cancel_event)
+
+    async def _run_mission_team(self,goal,context,cancel_event=None):
         order=[name.lower() for name,_ in AGENT_ROLES]
         results={}
         completed=[]
@@ -535,9 +538,7 @@ class Orchestrator:
                          f"Perform your part of this task now. Use the results already produced by earlier agents as evidence. "
                          f"Return concrete findings, reasoning, actions, and handoff information relevant to your duty.")
             if name == "oracle":
-                instruction=(f"{goal}\n\nYou are the final Oracle synthesizer. Review ALL evidence produced by the other agents in context.results. "
-                             f"Identify the strongest-supported opportunities, explain the evidence from each relevant agent, "
-                             f"surface missing evidence/uncertainty, and provide explicit next actions. Do not invent data.")
+                continue
             try:
                 result=await agent.run(context,instruction)
             except asyncio.CancelledError:
@@ -546,30 +547,15 @@ class Orchestrator:
             completed.append(name)
             save_memory(context.email,f"agent_{name}_result",json.dumps(result,default=str))
         status="cancelled" if cancelled else "completed"
+        if not cancelled:
+            oracle = self.agents.get("oracle")
+            if oracle:
+                results["oracle"] = await oracle.run(context, f"{goal}\nReview ALL context.results and synthesize supported findings, uncertainty, and next actions. Do not invent data.")
+                context.results["oracle"] = results["oracle"]
         return {"status":status,"goal":goal,"agent_count":len(results),"results":results,"roster":self.roster(),
                 "completed_agents":completed,"cancelled":cancelled}
     async def plan_and_execute(self,goal,context):
-        descriptions="\n".join(f"- {name}: {desc}" for name,desc in AGENT_ROLES)
-        prompt=f"""You are the VektorFlow 15XR orchestrator.
-Available agents:
-{descriptions}
-Goal: {goal}
-Shared context: {json.dumps(context.params,default=str)}
-Create JSON {{"tasks":[{{"agent":"name","instruction":"..."}}]}} using only the canonical 15 names."""
-        try:
-            response=await call_llm(prompt,DEFAULT_MODEL,context.llm_keys,context.params.get("temperature"))
-            text=response.get("response","{}"); match=re.search(r"\{.*\}",text,re.DOTALL)
-            plan=json.loads(match.group(0) if match else text)
-        except Exception:
-            return await self.team_execute(goal,context)
-        results={}
-        for task in plan.get("tasks",[]):
-            name=str(task.get("agent","")).lower(); agent=self.agents.get(name)
-            if not agent: continue
-            result=await agent.run(context,task.get("instruction",goal))
-            results[name]=result; context.results[name]=result
-            save_memory(context.email,f"agent_{name}_result",json.dumps(result,default=str))
-        return {"status":"completed","goal":goal,"plan":plan,"results":results,"agent_count":len(results)}
+        return await self._run_mission_team(goal, context)
 
 _orchestrator=Orchestrator()
 def get_orchestrator(): return _orchestrator

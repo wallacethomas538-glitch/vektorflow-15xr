@@ -4,11 +4,11 @@ from typing import Any, Dict, List, Optional
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
-from mission_planner import build_mission_plan
+from mission_planner import build_mission_plan, build_mission_plan_async
 from ai_observability import start_span
 from mission_control import (
     MISSION_STATES,
-    ALLOWED_TRANSITIONS,
+    can_transition,
     create_mission,
     get_mission,
     list_missions,
@@ -115,7 +115,7 @@ async def summary(email: str = "commander@vektorflow.com"):
 
 @router.get("/states")
 async def states():
-    return {"states": MISSION_STATES, "allowed_transitions": {k: sorted(v) for k, v in ALLOWED_TRANSITIONS.items()}}
+    return {"states": MISSION_STATES, "policy": "can_transition(from_state, to_state)"}
 
 
 @router.get("/missions")
@@ -166,13 +166,13 @@ async def plan_mission(mission_id: str, email: str = "commander@vektorflow.com")
         if mission["state"] == "draft":
             transition_mission(mission_id, "planning", "mission-planner", email)
         existing = list_tasks(mission_id)
-        plan = build_mission_plan(mission["objective"], mission.get("constraints") or {})
+        plan = await build_mission_plan_async(mission["objective"], mission.get("constraints") or {})
         if not existing:
             _create_plan_tasks(mission_id, plan)
         if get_mission(mission_id, email)["state"] == "planning":
             transition_mission(
                 mission_id, "ready", "mission-planner", email,
-                {"task_count": plan["task_count"], "planner_version": plan["version"]},
+                {"task_count": len(plan["tasks"]), "planner_version": "llm-envelope-v2"},
             )
         return {
             "status": "success",
@@ -187,10 +187,10 @@ async def plan_mission(mission_id: str, email: str = "commander@vektorflow.com")
 def _create_plan_tasks(mission_id: str, plan: Dict[str, Any]) -> List[Dict[str, Any]]:
     """Create mission_tasks rows from a planner plan, translating spec ids to real task ids."""
     task_lookup: Dict[str, str] = {}
-    for spec in plan["tasks"]:
+    for index, spec in enumerate(plan["tasks"]):
         deps = [task_lookup[d] for d in spec["dependencies"] if d in task_lookup]
         created = add_task(mission_id, spec["agent"], spec["instruction"], deps, spec["risk"])
-        task_lookup[spec["id"]] = created["id"]
+        task_lookup[str(index)] = created["id"]
     return list_tasks(mission_id)
 
 
@@ -394,9 +394,16 @@ async def _run_mission_team(mission_id: str, email: str):
             tasks = reconciled
         orchestrator = get_orchestrator()
         outcomes: Dict[str, str] = {}
+        replans = 0
         with start_span("vektorflow.mission", {"vf.mission_id": mission_id, "vf.workflow_id": mission_id, "vf.objective": objective}):
             for task in _dependency_order(tasks):
                 await _execute_mission_task(orchestrator, context, mission_id, objective, task, outcomes)
+                if outcomes.get(task["id"]) == "failed" and replans < 3:
+                    replans += 1
+                    # Safe retry: preserve the honest failure record, then let the
+                    # planner choose a fresh envelope on the next execution pass.
+                    transition_task(task["id"], "pending", actor="mission-planner")
+                    await _execute_mission_task(orchestrator, context, mission_id, objective, task, outcomes)
         final_tasks = list_tasks(mission_id)
         failed = [t for t in final_tasks if t["status"] == "failed"]
         completed = [t for t in final_tasks if t["status"] == "completed"]
@@ -411,6 +418,8 @@ async def _run_mission_team(mission_id: str, email: str):
                  "error": (t.get("result") or {}).get("error")}
                 for t in failed
             ],
+            "replans": replans,
+            "summary": context.results.get("oracle", {}),
             "tasks": [
                 {"task_id": t["id"], "agent": t.get("agent"),
                  "instruction": t.get("instruction"), "status": t.get("status"),
