@@ -3,6 +3,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import AsyncMock, patch
 
 os.environ.setdefault("JWT_SECRET_KEY", "test-secret")
 ROOT = Path(__file__).resolve().parents[1]
@@ -224,7 +225,13 @@ class AgentToolGateTests(unittest.IsolatedAsyncioTestCase):
             self.assertIn("watch_new_orders", context.params.get("tool_evidence", {}))
             return {"status": "completed", "message": "I see the new order evidence.", "actions": [], "handoff": "", "evidence": ""}
         agent._llm_structured = fake_llm
-        result = await agent._execute(make_context(), "A new order came in - check orders")
+        denied_declaration = AsyncMock(return_value={
+            "success": False,
+            "error": "declaration unavailable",
+            "policy": {"allowed": False},
+        })
+        with patch("vektorflow_agents.agent_llm", new=denied_declaration):
+            result = await agent._execute(make_context(), "A new order came in - check orders")
         self.assertEqual(result["tool_evidence"]["watch_new_orders"]["count"], 1)
         self.assertIn("get_shopify_orders", result["tool_evidence"])
         self.assertTrue(any(call["tool"] == "watch_new_orders" for call in result["tool_calls"]))

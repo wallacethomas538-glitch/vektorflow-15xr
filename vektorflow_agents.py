@@ -69,6 +69,51 @@ def _policy_denied(result):
     decision=result.get("policy") if isinstance(result,dict) else None
     return isinstance(decision,dict) and decision.get("allowed") is False
 
+def _payload_blocked(result):
+    """True when an agent payload carries a blocked verdict.
+
+    A blocked payload is not completed work: the agent produced no answer, so
+    the run must never be labelled completed.
+    """
+    if not isinstance(result,dict):
+        return False
+    if result.get("blocked") is True:
+        return True
+    return str(result.get("status") or "").strip().lower() in {"blocked","awaiting_approval"}
+
+def _declared_tool_names(parsed):
+    """Pull a list of tool names out of a declaration payload."""
+    if isinstance(parsed,list):
+        return [str(item).strip() for item in parsed if isinstance(item,str) and item.strip()]
+    if isinstance(parsed,dict):
+        for key in ("tools","needs","tool_names"):
+            value=parsed.get(key)
+            if isinstance(value,list):
+                return [str(item).strip() for item in value if isinstance(item,str) and item.strip()]
+    return []
+
+def _parse_declared_tools(text):
+    """Parse an agent's tool-need declaration into a list of tool names.
+
+    Returns [] when the output is missing or unparseable — the caller then
+    falls back to keyword matching instead of guessing.
+    """
+    if not isinstance(text,str) or not text.strip():
+        return []
+    candidates=[]
+    match=re.search(r"\{.*\}",text,re.DOTALL)
+    if match: candidates.append(match.group(0))
+    candidates.append(text.strip())
+    for candidate in candidates:
+        try:
+            parsed=json.loads(candidate)
+        except Exception:
+            continue
+        names=_declared_tool_names(parsed)
+        if names:
+            return names
+    return []
+
 @dataclass
 class AgentContext:
     email: str
@@ -169,19 +214,38 @@ class BaseAgent:
             ):
                 result=await self._execute(context,instruction)
             self.result=result
-            self.status=AgentStatus.COMPLETED
-            await bus.publish(
-                "agent.run.completed",
-                {
-                    "run_id":run_id,
-                    "task_id":context.params.get("task_id"),
-                    "email":context.email,
-                    "agent":self.name,
-                    "source_agent":self.name,
-                    "result":result,
-                },
-                source=self.name,
-            )
+            if _payload_blocked(result):
+                # Blocked is not completed: report the failed verdict instead of
+                # publishing a completed run for work that never happened.
+                self.status=AgentStatus.FAILED
+                await bus.publish(
+                    "agent.run.failed",
+                    {
+                        "run_id":run_id,
+                        "task_id":context.params.get("task_id"),
+                        "email":context.email,
+                        "agent":self.name,
+                        "source_agent":self.name,
+                        "blocked":True,
+                        "error":str((result.get("error") if isinstance(result,dict) else None) or "Agent run was blocked; no work was performed."),
+                        "result":result,
+                    },
+                    source=self.name,
+                )
+            else:
+                self.status=AgentStatus.COMPLETED
+                await bus.publish(
+                    "agent.run.completed",
+                    {
+                        "run_id":run_id,
+                        "task_id":context.params.get("task_id"),
+                        "email":context.email,
+                        "agent":self.name,
+                        "source_agent":self.name,
+                        "result":result,
+                    },
+                    source=self.name,
+                )
             handoff=result.get("handoff") if isinstance(result,dict) else None
             if handoff:
                 target=None
@@ -234,25 +298,66 @@ class BaseAgent:
         text=(instruction or "").lower()
         params=getattr(context, "params", {}) or {}
         wanted=[]
-        def wants(tool, *terms):
-            if tool in self.tool_handlers and any(term in text for term in terms):
+
+        # 1) Agent-declared needs via the authorized gateway (agent's own name).
+        declared_tools=[]
+        if getattr(self,"tool_handlers",None):
+            available_tools=sorted(t for t in self.tool_handlers.keys() if t)
+            if available_tools:
+                decl_prompt=f"""You are the {self.name} agent in VektorFlow 15XR.
+Persona: {self.persona}
+Duty: {self.description}
+User goal/instruction: {instruction}
+Business context: {json.dumps(context.params,default=str)}
+Available tools (only these may be used): {json.dumps(available_tools)}
+
+Return JSON ONLY with keys tools or needs as a list of tool names you need to gather evidence for THIS task.
+Only pick from the available tools list. Do not include read_team_results unless it is necessary and present.
+Do not explain. Do not return an empty list if evidence is clearly needed for your duty."""
+                try:
+                    decl_result=await agent_llm(self.name,decl_prompt,DEFAULT_MODEL,context.llm_keys,
+                                               mission_id=context.params.get("mission_id"),
+                                               temperature=None)
+                    if not _policy_denied(decl_result):
+                        decl_text=decl_result.get("response") if isinstance(decl_result,dict) else ""
+                        for name in _parse_declared_tools(decl_text):
+                            if name in self.tool_handlers:
+                                declared_tools.append(name)
+                except Exception as exc:
+                    logger.debug("Agent %s tool declaration failed (%s); falling back to keywords",self.name,exc)
+        for tool in declared_tools:
+            if tool not in wanted:
                 wanted.append(tool)
+
+        # 2) Non-negotiable structural picks from params (not keyword-based).
         if "read_team_results" in self.tool_handlers and context.results:
-            wanted.append("read_team_results")
-        wants("check_inventory", "inventory", "stock", "low stock", "out of stock")
-        wants("get_inventory_alerts", "inventory alert", "stock alert", "low stock")
-        wants("get_shopify_products", "product", "catalog", "store", "shopify", "listing", "bundle")
-        wants("get_shopify_orders", "order", "customer", "fulfillment", "shipping", "service")
-        wants("watch_new_orders", "new order", "new orders", "order came in", "orders")
-        wants("watch_abandoned_carts", "abandoned", "cart", "checkout")
-        wants("search_cj_products", "supplier", "cj", "dropship", "source product")
-        wants("get_cj_product_details", "supplier product", "cj product", "product id")
+            if "read_team_results" not in wanted:
+                wanted.append("read_team_results")
         if "handle_email_notification" in self.tool_handlers and isinstance(params.get("email_event"), dict):
-            wanted.append("handle_email_notification")
+            if "handle_email_notification" not in wanted:
+                wanted.append("handle_email_notification")
         if "classify_customer_message" in self.tool_handlers and isinstance(params.get("customer_message"), dict):
-            wanted.append("classify_customer_message")
+            if "classify_customer_message" not in wanted:
+                wanted.append("classify_customer_message")
         if "create_order_service_case" in self.tool_handlers and isinstance(params.get("order"), dict):
-            wanted.append("create_order_service_case")
+            if "create_order_service_case" not in wanted:
+                wanted.append("create_order_service_case")
+
+        # 3) Fallback keyword matching (safety net) when declaration gave nothing usable.
+        if not declared_tools:
+            def wants(tool, *terms):
+                if tool in self.tool_handlers and any(term in text for term in terms):
+                    if tool not in wanted:
+                        wanted.append(tool)
+            wants("check_inventory", "inventory", "stock", "low stock", "out of stock")
+            wants("get_inventory_alerts", "inventory alert", "stock alert", "low stock")
+            wants("get_shopify_products", "product", "catalog", "store", "shopify", "listing", "bundle")
+            wants("get_shopify_orders", "order", "customer", "fulfillment", "shipping", "service")
+            wants("watch_new_orders", "new order", "new orders", "order came in", "orders")
+            wants("watch_abandoned_carts", "abandoned", "cart", "checkout")
+            wants("search_cj_products", "supplier", "cj", "dropship", "source product")
+            wants("get_cj_product_details", "supplier product", "cj product", "product id")
+
         evidence={}
         seen=set()
         for tool in wanted:

@@ -215,3 +215,156 @@ def test_run_agent_task_falls_back_to_the_unified_path_for_unknown_agents():
         asyncio.run(va.run_agent_task("nobody@vektorflow.com", "Nobody", "grow the store"))
     team_execute.assert_awaited_once()
     assert team_execute.await_args.args[0] == "grow the store"
+
+
+# --- run-status label is truthful for blocked runs --------------------
+
+def test_policy_blocked_run_does_not_report_completed_at_the_run_or_event_layer():
+    agent = _agent()
+    bus_events = []
+    from src import event_bus
+
+    class _FakeBus:
+        def receive_agent_messages(self, agent_name, limit=20):
+            return []
+        async def publish(self, event_type, data, source=None):
+            bus_events.append((event_type, data))
+            return {"event_id": "evt_test"}
+
+    result = {"agent": AGENT, "status": "blocked", "blocked": True, "error": "Kill switch is on for agent 'Echo'."}
+    with patch("src.event_bus.get_event_bus", return_value=_FakeBus()), \
+         patch.object(agent, "_execute", new=AsyncMock(return_value=result)):
+        returned = asyncio.run(agent.run(_context(), "do something"))
+
+    assert returned == result
+    assert agent.status.name == "FAILED"
+    event_types = [et for et, _ in bus_events]
+    assert "agent.run.started" in event_types
+    assert "agent.run.completed" not in event_types
+    assert "agent.run.failed" in event_types
+    failed_events = [data for et, data in bus_events if et == "agent.run.failed"]
+    assert failed_events
+    assert failed_events[0].get("blocked") is True
+    assert "error" in failed_events[0]
+
+
+# --- agent-declared needs ---------------------------------------------
+
+def _make_decl_agent():
+    calls = []
+
+    async def fake_tool(ctx, **kwargs):
+        calls.append("tool_called")
+        return {"success": True}
+
+    agent = va.RoleAgent(
+        AGENT,
+        "Customer communications",
+        va._tools("get_shopify_orders", "watch_new_orders"),
+        {"get_shopify_orders": fake_tool, "watch_new_orders": fake_tool},
+    )
+    return agent, calls
+
+
+def test_declaration_success_gathers_declared_tools():
+    agent, calls = _make_decl_agent()
+    decl = AsyncMock(return_value={"success": True, "response": '{"tools": ["watch_new_orders"]}'})
+    ordered = []
+
+    async def fake_llm_structured(ctx, instr):
+        ordered.append("llm_structured")
+        return {"status": "completed", "message": "done"}
+
+    async def fake_agent_llm(a, prompt, model, keys, mission_id=None, temperature=None):
+        if "Available tools" in prompt:
+            ordered.append("declaration")
+            return decl.return_value
+        return {"success": True, "response": "x"}
+
+    with patch("vektorflow_agents.agent_llm", side_effect=fake_agent_llm), \
+         patch.object(agent, "_llm_structured", new=fake_llm_structured):
+        result = asyncio.run(agent._execute(_context(), "check orders"))
+
+    assert ordered.index("declaration") < ordered.index("llm_structured")
+    assert "watch_new_orders" in result.get("tool_evidence", {})
+    assert calls
+
+
+def test_declaration_denied_falls_back_to_keywords():
+    agent, calls = _make_decl_agent()
+    ordered = []
+
+    async def fake_llm_role(ctx, instr):
+        ordered.append("llm_role")
+        return "done"
+
+    async def fake_agent_llm(a, prompt, model, keys, mission_id=None, temperature=None):
+        if "Available tools" in prompt:
+            return {"success": False, "error": "Kill switch is on for agent 'Echo'.", "policy": {"allowed": False}}
+        return {"success": True, "response": "x"}
+
+    with patch("vektorflow_agents.agent_llm", side_effect=fake_agent_llm), \
+         patch.object(agent, "_llm_role", new=fake_llm_role):
+        result = asyncio.run(agent._execute(_context(), "A new order came in - check orders"))
+
+    assert "watch_new_orders" in result.get("tool_evidence", {})
+    assert calls
+
+
+def test_garbage_declaration_falls_back_to_keywords():
+    agent, calls = _make_decl_agent()
+
+    async def fake_llm_role(ctx, instr):
+        return "done"
+
+    async def fake_agent_llm(a, prompt, model, keys, mission_id=None, temperature=None):
+        if "Available tools" in prompt:
+            return {"success": True, "response": "not json at all"}
+        return {"success": True, "response": "x"}
+
+    with patch("vektorflow_agents.agent_llm", side_effect=fake_agent_llm), \
+         patch.object(agent, "_llm_role", new=fake_llm_role):
+        result = asyncio.run(agent._execute(_context(), "A new order came in - check orders"))
+
+    assert "watch_new_orders" in result.get("tool_evidence", {})
+
+
+def test_unknown_tool_names_are_filtered_out():
+    agent, calls = _make_decl_agent()
+
+    async def fake_llm_role(ctx, instr):
+        return "done"
+
+    async def fake_agent_llm(a, prompt, model, keys, mission_id=None, temperature=None):
+        if "Available tools" in prompt:
+            return {"success": True, "response": '{"tools": ["host_shell", "watch_new_orders"]}'}
+        return {"success": True, "response": "x"}
+
+    with patch("vektorflow_agents.agent_llm", side_effect=fake_agent_llm), \
+         patch.object(agent, "_llm_role", new=fake_llm_role):
+        result = asyncio.run(agent._execute(_context(), "A new order came in - check orders"))
+
+    evidence = result.get("tool_evidence", {})
+    assert "host_shell" not in evidence
+    assert "watch_new_orders" in evidence
+
+
+def test_keyword_path_still_selects_correctly_when_no_declaration_happens():
+    agent, calls = _make_decl_agent()
+
+    async def fake_llm_role(ctx, instr):
+        return "done"
+
+    async def fake_agent_llm(a, prompt, model, keys, mission_id=None, temperature=None):
+        # no declaration call path if agent has no handlers? they do; simulate exception -> fallback
+        if "Available tools" in prompt:
+            raise RuntimeError("boom")
+        return {"success": True, "response": "x"}
+
+    with patch("vektorflow_agents.agent_llm", side_effect=fake_agent_llm), \
+         patch.object(agent, "_llm_role", new=fake_llm_role):
+        result = asyncio.run(agent._execute(_context(), "A new order came in - check orders"))
+
+    assert "watch_new_orders" in result.get("tool_evidence", {})
+    assert calls
+
