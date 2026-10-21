@@ -8,7 +8,8 @@ from typing import Dict, Any, List, Optional, Callable
 from dataclasses import dataclass, field
 from enum import Enum
 from database import get_user, get_user_stores, get_llm_keys, get_icp_data, save_memory, get_all_memory
-from llm_handler import call_llm, DEFAULT_MODEL
+from llm_handler import DEFAULT_MODEL
+from llm_gateway import agent_llm
 from store_manager import search_cj_products, get_cj_product_details
 from trend_engine import get_tiktok_trends
 from external_tools import brave_search, tavily_search, apify_actor, webscraping_ai
@@ -59,6 +60,15 @@ TOOL_RISK = {
 class AgentStatus(Enum):
     IDLE="idle"; RUNNING="running"; COMPLETED="completed"; FAILED="failed"
 
+def _policy_denied(result):
+    """True when the LLM gateway refused the request on policy grounds.
+
+    A policy denial is not a provider failure: the provider was never called.
+    The distinction keeps a denied request from being reported as work.
+    """
+    decision=result.get("policy") if isinstance(result,dict) else None
+    return isinstance(decision,dict) and decision.get("allowed") is False
+
 @dataclass
 class AgentContext:
     email: str
@@ -75,7 +85,7 @@ class BaseAgent:
     def __init__(self,name:str,description:str,tools:Optional[List[Dict]]=None,tool_handlers:Optional[Dict[str,Callable]]=None):
         self.name=name; self.description=description; self.persona=AGENT_PERSONAS.get(name, "You are the " + name + " specialist in VektorFlow 15XR. Stay within your defined duty and be factual."); self.tools=tools or []
         self.tool_handlers=tool_handlers or {}
-        self.status=AgentStatus.IDLE; self.result=None
+        self.status=AgentStatus.IDLE; self.result=None; self.llm_blocked_reason=None
 
     async def use_tool(self,tool_name:str,context,**kwargs):
         if get_kill_switch().is_killed(self.name):
@@ -273,7 +283,14 @@ Business context: {json.dumps(context.params,default=str)}
 Conversation with this agent:
 {json.dumps(context.conversation_history[-12:],default=str)}
 Respond naturally as the {self.name} agent. Do not return JSON, markdown data structures, status objects, tool metadata, or empty placeholders. Speak directly to the user like a real business specialist. Give concrete reasoning, findings, and next actions when the available evidence supports them. Be honest when required data is not available. Never claim an external action was completed unless the connected integration actually performed it."""
-        result=await call_llm(prompt,DEFAULT_MODEL,context.llm_keys,context.params.get("temperature"))
+        result=await agent_llm(self.name,prompt,DEFAULT_MODEL,context.llm_keys,
+                               mission_id=context.params.get("mission_id"),
+                               temperature=context.params.get("temperature"))
+        if _policy_denied(result):
+            reason=str(result.get("error") or "LLM request denied by policy.")
+            self.llm_blocked_reason=reason
+            logger.warning("Agent %s LLM request denied by policy: %s",self.name,reason)
+            return f"Blocked by policy: {reason} I did not run the LLM, so no work was performed."
         return (result.get("response") or "I am ready to help, but I do not have enough information to answer that yet.").strip()
 
     async def _llm_structured(self,context,instruction):
@@ -290,7 +307,14 @@ Tool evidence gathered for this run:
 Business context: {json.dumps(context.params,default=str)}
 Return concise JSON with keys: status, message, actions, handoff, evidence. The message must be a natural response from the agent, not JSON or tool metadata. Never return an empty message when the assigned duty can be performed from the supplied context.
 Never claim an external action was completed unless the connected integration actually performed it."""
-        result=await call_llm(prompt,DEFAULT_MODEL,context.llm_keys,context.params.get("temperature"))
+        result=await agent_llm(self.name,prompt,DEFAULT_MODEL,context.llm_keys,
+                               mission_id=context.params.get("mission_id"),
+                               temperature=context.params.get("temperature"))
+        if _policy_denied(result):
+            reason=str(result.get("error") or "LLM request denied by policy.")
+            self.llm_blocked_reason=reason
+            logger.warning("Agent %s LLM request denied by policy: %s",self.name,reason)
+            return {"status":"blocked","blocked":True,"error":reason,"message":f"Blocked by policy: {reason} I did not run the LLM, so no work was performed.","actions":[],"handoff":"","evidence":""}
         text=result.get("response","")
         try:
             match=re.search(r"\{.*\}",text,re.DOTALL)
@@ -349,9 +373,10 @@ class SmaugAgent(RoleAgent):
         result=await self._llm_role(context,instruction)
         tool_calls=[{"tool":"read_team_results","status":"completed","agents_available":list(team_results.keys())}]
         tool_calls += [{"tool":tool,"status":"failed" if isinstance(value,dict) and value.get("success") is False else "completed"} for tool,value in evidence.items()]
-        return {
+        blocked=self.llm_blocked_reason
+        payload={
             "agent": self.name,
-            "status": "completed",
+            "status": "blocked" if blocked else "completed",
             "message": result,
             "actions": [],
             "handoff": "",
@@ -359,6 +384,10 @@ class SmaugAgent(RoleAgent):
             "tool_evidence": evidence,
             "tool_calls": tool_calls
         }
+        if blocked:
+            payload["blocked"]=True
+            payload["error"]=blocked
+        return payload
 
 
 class AdImageAgent:
@@ -554,8 +583,6 @@ class Orchestrator:
                 context.results["oracle"] = results["oracle"]
         return {"status":status,"goal":goal,"agent_count":len(results),"results":results,"roster":self.roster(),
                 "completed_agents":completed,"cancelled":cancelled}
-    async def plan_and_execute(self,goal,context):
-        return await self._run_mission_team(goal, context)
 
 _orchestrator=Orchestrator()
 def get_orchestrator(): return _orchestrator
@@ -564,9 +591,9 @@ async def run_agent_task(email,agent_name,command,params=None):
     context=AgentContext(email=email,user=get_user(email) or {},stores=get_user_stores(email) or [],
         llm_keys=get_llm_keys(email) or {},icp=get_icp_data(email) or {},memory=get_all_memory(email) or {},params=params or {})
     if agent_name.lower() in {"orchestrator","auto","autopilot","vektor"}:
-        return await _orchestrator.plan_and_execute(command,context)
+        return await _orchestrator.team_execute(command,context)
     agent=_orchestrator.get_agent(agent_name)
-    return await agent.run(context,command) if agent else await _orchestrator.plan_and_execute(command,context)
+    return await agent.run(context,command) if agent else await _orchestrator.team_execute(command,context)
 
 class Autopilot:
     def __init__(self): self.running=False; self.interval_seconds=3600

@@ -275,7 +275,7 @@ class MissionPersistenceTests(unittest.TestCase):
             mc.transition_mission(mission["id"], state, "test", TEST_EMAIL)
         mc.add_task(mission["id"], "Cerebrum", "summarize team state", [], "low")
 
-        with mock.patch("vektorflow_agents.call_llm", return_value={"response": ""}):
+        with mock.patch("llm_gateway.call_llm", return_value={"response": ""}):
             result = asyncio.run(mca._run_mission_team(mission["id"], TEST_EMAIL))
 
         rows = mc.list_tasks(mission["id"])
