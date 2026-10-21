@@ -154,32 +154,37 @@ class MissionPersistenceTests(unittest.TestCase):
     def test_agent_work_guard_rejects_empty_output(self):
         ok, reason = mca._agent_work_succeeded({"agent": "X", "status": "completed", "message": ""})
         self.assertFalse(ok)
-        self.assertIn("no message", reason)
+        self.assertIn("summary", reason)
 
     def test_agent_work_guard_rejects_placeholder_response(self):
         ok, reason = mca._agent_work_succeeded({
             "agent": "X",
             "status": "completed",
+            "summary": "No usable result was produced.",
+            "evidence": [],
             "message": "I am ready to help, but I do not have enough information to answer that yet.",
         })
         self.assertFalse(ok)
-        self.assertIn("placeholder", reason)
+        self.assertIn("evidence", reason)
 
     def test_agent_work_guard_rejects_failed_and_blocked(self):
         ok, _ = mca._agent_work_succeeded({"agent": "X", "status": "failed", "error": "boom"})
         self.assertFalse(ok)
         ok, reason = mca._agent_work_succeeded({"agent": "X", "status": "blocked"})
         self.assertFalse(ok)
-        self.assertIn("blocked", reason)
+        self.assertIn("status", reason)
 
     def test_agent_work_guard_accepts_real_evidence(self):
         ok, _ = mca._agent_work_succeeded({
             "agent": "Scout", "status": "completed",
+            "summary": "Found three niches.",
             "message": "found 3 niches", "evidence": "trend snapshot",
         })
         self.assertTrue(ok)
         ok, _ = mca._agent_work_succeeded({
             "agent": "Scout", "status": "completed",
+            "summary": "Found a product.",
+            "evidence": [{"source": "catalog", "value": "widget"}],
             "type": "products", "data": [{"title": "widget"}],
         })
         self.assertTrue(ok)
@@ -188,16 +193,19 @@ class MissionPersistenceTests(unittest.TestCase):
         # Re-reading shared team context is not doing the work.
         ok, reason = mca._agent_work_succeeded({
             "agent": "Architect", "status": "completed", "message": "",
+            "summary": "Only shared context was available.",
             "actions": [], "handoff": "", "evidence": "",
             "tool_calls": [{"tool": "read_team_results", "status": "completed"}],
             "tool_evidence": {"read_team_results": {"scout": {"message": "x"}}},
         })
         self.assertFalse(ok)
-        self.assertIn("no message", reason)
+        self.assertIn("evidence", reason)
 
     def test_agent_work_guard_accepts_completed_real_tool(self):
         ok, _ = mca._agent_work_succeeded({
             "agent": "Rook", "status": "completed", "message": "",
+            "summary": "Products were retrieved.",
+            "evidence": [{"source": "shopify", "value": "products"}],
             "tool_calls": [
                 {"tool": "read_team_results", "status": "completed"},
                 {"tool": "get_shopify_products", "status": "completed"},

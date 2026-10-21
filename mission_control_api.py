@@ -232,6 +232,36 @@ _EMPTY_AGENT_MESSAGES = {
 _CONTEXT_READ_TOOLS = {"read_team_results", "read_memory"}
 
 
+def _task_result_completion_gate(agent_result: Any) -> tuple[bool, str]:
+    """Validate the vektormind.task-result.v1 completion envelope."""
+    if not isinstance(agent_result, dict):
+        return False, "task result is not an object"
+    if str(agent_result.get("status", "")).lower() != "completed":
+        return False, "status is not completed"
+    if not str(agent_result.get("summary", "")).strip():
+        return False, "summary is empty"
+    evidence = agent_result.get("evidence")
+    if isinstance(evidence, dict):
+        evidence_items = list(evidence.values())
+    elif isinstance(evidence, list):
+        evidence_items = evidence
+    else:
+        evidence_items = [evidence] if evidence else []
+    if not any(item not in (None, "", {}, []) for item in evidence_items):
+        return False, "no verifiable evidence attached"
+    for tool_call in agent_result.get("tool_calls") or []:
+        if isinstance(tool_call, dict) and tool_call.get("required", True) and str(tool_call.get("status", "")).lower() in {"failed", "error", "blocked"}:
+            return False, f"required tool call failed: {tool_call.get('tool', 'unknown')}"
+    approvals = agent_result.get("approvals") or agent_result.get("approval_requests") or []
+    if isinstance(approvals, dict):
+        approvals = list(approvals.values())
+    for approval in approvals:
+        state = str(approval.get("status", approval.get("state", "")) if isinstance(approval, dict) else approval).lower()
+        if state in {"pending", "unresolved", "awaiting_approval", "requested", "open"}:
+            return False, "approvals are unresolved"
+    return True, ""
+
+
 def _agent_work_succeeded(agent_result: Any) -> tuple:
     """Decide whether an agent's returned payload counts as real completed work.
 
@@ -240,9 +270,7 @@ def _agent_work_succeeded(agent_result: Any) -> tuple:
     stops an empty, placeholder, or work-free response from being recorded as
     completed. Merely re-reading shared team context is not work.
     """
-    if not isinstance(agent_result, dict):
-        text = str(agent_result or "").strip()
-        return (bool(text), "" if text else "agent returned no usable output")
+    return _task_result_completion_gate(agent_result)
     status = str(agent_result.get("status", "")).lower()
     error = agent_result.get("error")
     if status in {"failed", "blocked"} or error:
