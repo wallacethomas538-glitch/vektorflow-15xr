@@ -97,8 +97,13 @@ async def build_mission_plan_async(objective: str, constraints: Dict[str, Any] |
               "Use only roster agent names; dependencies reference task indices.\n" +
               json.dumps({"objective": objective, "roster": _roster(), "constraints": constraints}))
     try:
-        from llm_handler import call_llm, DEFAULT_MODEL
-        response = await call_llm(prompt, DEFAULT_MODEL, constraints.get("llm_keys", {}), None)
+        from llm_handler import DEFAULT_MODEL
+        from llm_gateway import agent_llm
+        response = await agent_llm(
+            "MissionPlanner", prompt, DEFAULT_MODEL, constraints.get("llm_keys", {})
+        )
+        if not response.get("success", True):
+            return _safe_plan(objective)
         text = response.get("response", "{}")
         match = re.search(r"\{.*\}", text, re.DOTALL)
         return _validate(json.loads(match.group(0) if match else text), objective)
