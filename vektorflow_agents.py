@@ -8,7 +8,8 @@ from typing import Dict, Any, List, Optional, Callable
 from dataclasses import dataclass, field
 from enum import Enum
 from database import get_user, get_user_stores, get_llm_keys, get_icp_data, save_memory, get_all_memory
-from llm_handler import call_llm, DEFAULT_MODEL
+from llm_handler import DEFAULT_MODEL
+from llm_gateway import agent_llm
 from store_manager import search_cj_products, get_cj_product_details
 from trend_engine import get_tiktok_trends
 from external_tools import brave_search, tavily_search, apify_actor, webscraping_ai
@@ -59,6 +60,60 @@ TOOL_RISK = {
 class AgentStatus(Enum):
     IDLE="idle"; RUNNING="running"; COMPLETED="completed"; FAILED="failed"
 
+def _policy_denied(result):
+    """True when the LLM gateway refused the request on policy grounds.
+
+    A policy denial is not a provider failure: the provider was never called.
+    The distinction keeps a denied request from being reported as work.
+    """
+    decision=result.get("policy") if isinstance(result,dict) else None
+    return isinstance(decision,dict) and decision.get("allowed") is False
+
+def _payload_blocked(result):
+    """True when an agent payload carries a blocked verdict.
+
+    A blocked payload is not completed work: the agent produced no answer, so
+    the run must never be labelled completed.
+    """
+    if not isinstance(result,dict):
+        return False
+    if result.get("blocked") is True:
+        return True
+    return str(result.get("status") or "").strip().lower() in {"blocked","awaiting_approval"}
+
+def _declared_tool_names(parsed):
+    """Pull a list of tool names out of a declaration payload."""
+    if isinstance(parsed,list):
+        return [str(item).strip() for item in parsed if isinstance(item,str) and item.strip()]
+    if isinstance(parsed,dict):
+        for key in ("tools","needs","tool_names"):
+            value=parsed.get(key)
+            if isinstance(value,list):
+                return [str(item).strip() for item in value if isinstance(item,str) and item.strip()]
+    return []
+
+def _parse_declared_tools(text):
+    """Parse an agent's tool-need declaration into a list of tool names.
+
+    Returns [] when the output is missing or unparseable — the caller then
+    falls back to keyword matching instead of guessing.
+    """
+    if not isinstance(text,str) or not text.strip():
+        return []
+    candidates=[]
+    match=re.search(r"\{.*\}",text,re.DOTALL)
+    if match: candidates.append(match.group(0))
+    candidates.append(text.strip())
+    for candidate in candidates:
+        try:
+            parsed=json.loads(candidate)
+        except Exception:
+            continue
+        names=_declared_tool_names(parsed)
+        if names:
+            return names
+    return []
+
 @dataclass
 class AgentContext:
     email: str
@@ -75,7 +130,7 @@ class BaseAgent:
     def __init__(self,name:str,description:str,tools:Optional[List[Dict]]=None,tool_handlers:Optional[Dict[str,Callable]]=None):
         self.name=name; self.description=description; self.persona=AGENT_PERSONAS.get(name, "You are the " + name + " specialist in VektorFlow 15XR. Stay within your defined duty and be factual."); self.tools=tools or []
         self.tool_handlers=tool_handlers or {}
-        self.status=AgentStatus.IDLE; self.result=None
+        self.status=AgentStatus.IDLE; self.result=None; self.llm_blocked_reason=None
 
     async def use_tool(self,tool_name:str,context,**kwargs):
         if get_kill_switch().is_killed(self.name):
@@ -159,19 +214,38 @@ class BaseAgent:
             ):
                 result=await self._execute(context,instruction)
             self.result=result
-            self.status=AgentStatus.COMPLETED
-            await bus.publish(
-                "agent.run.completed",
-                {
-                    "run_id":run_id,
-                    "task_id":context.params.get("task_id"),
-                    "email":context.email,
-                    "agent":self.name,
-                    "source_agent":self.name,
-                    "result":result,
-                },
-                source=self.name,
-            )
+            if _payload_blocked(result):
+                # Blocked is not completed: report the failed verdict instead of
+                # publishing a completed run for work that never happened.
+                self.status=AgentStatus.FAILED
+                await bus.publish(
+                    "agent.run.failed",
+                    {
+                        "run_id":run_id,
+                        "task_id":context.params.get("task_id"),
+                        "email":context.email,
+                        "agent":self.name,
+                        "source_agent":self.name,
+                        "blocked":True,
+                        "error":str((result.get("error") if isinstance(result,dict) else None) or "Agent run was blocked; no work was performed."),
+                        "result":result,
+                    },
+                    source=self.name,
+                )
+            else:
+                self.status=AgentStatus.COMPLETED
+                await bus.publish(
+                    "agent.run.completed",
+                    {
+                        "run_id":run_id,
+                        "task_id":context.params.get("task_id"),
+                        "email":context.email,
+                        "agent":self.name,
+                        "source_agent":self.name,
+                        "result":result,
+                    },
+                    source=self.name,
+                )
             handoff=result.get("handoff") if isinstance(result,dict) else None
             if handoff:
                 target=None
@@ -224,25 +298,66 @@ class BaseAgent:
         text=(instruction or "").lower()
         params=getattr(context, "params", {}) or {}
         wanted=[]
-        def wants(tool, *terms):
-            if tool in self.tool_handlers and any(term in text for term in terms):
+
+        # 1) Agent-declared needs via the authorized gateway (agent's own name).
+        declared_tools=[]
+        if getattr(self,"tool_handlers",None):
+            available_tools=sorted(t for t in self.tool_handlers.keys() if t)
+            if available_tools:
+                decl_prompt=f"""You are the {self.name} agent in VektorFlow 15XR.
+Persona: {self.persona}
+Duty: {self.description}
+User goal/instruction: {instruction}
+Business context: {json.dumps(context.params,default=str)}
+Available tools (only these may be used): {json.dumps(available_tools)}
+
+Return JSON ONLY with keys tools or needs as a list of tool names you need to gather evidence for THIS task.
+Only pick from the available tools list. Do not include read_team_results unless it is necessary and present.
+Do not explain. Do not return an empty list if evidence is clearly needed for your duty."""
+                try:
+                    decl_result=await agent_llm(self.name,decl_prompt,DEFAULT_MODEL,context.llm_keys,
+                                               mission_id=context.params.get("mission_id"),
+                                               temperature=None)
+                    if not _policy_denied(decl_result):
+                        decl_text=decl_result.get("response") if isinstance(decl_result,dict) else ""
+                        for name in _parse_declared_tools(decl_text):
+                            if name in self.tool_handlers:
+                                declared_tools.append(name)
+                except Exception as exc:
+                    logger.debug("Agent %s tool declaration failed (%s); falling back to keywords",self.name,exc)
+        for tool in declared_tools:
+            if tool not in wanted:
                 wanted.append(tool)
+
+        # 2) Non-negotiable structural picks from params (not keyword-based).
         if "read_team_results" in self.tool_handlers and context.results:
-            wanted.append("read_team_results")
-        wants("check_inventory", "inventory", "stock", "low stock", "out of stock")
-        wants("get_inventory_alerts", "inventory alert", "stock alert", "low stock")
-        wants("get_shopify_products", "product", "catalog", "store", "shopify", "listing", "bundle")
-        wants("get_shopify_orders", "order", "customer", "fulfillment", "shipping", "service")
-        wants("watch_new_orders", "new order", "new orders", "order came in", "orders")
-        wants("watch_abandoned_carts", "abandoned", "cart", "checkout")
-        wants("search_cj_products", "supplier", "cj", "dropship", "source product")
-        wants("get_cj_product_details", "supplier product", "cj product", "product id")
+            if "read_team_results" not in wanted:
+                wanted.append("read_team_results")
         if "handle_email_notification" in self.tool_handlers and isinstance(params.get("email_event"), dict):
-            wanted.append("handle_email_notification")
+            if "handle_email_notification" not in wanted:
+                wanted.append("handle_email_notification")
         if "classify_customer_message" in self.tool_handlers and isinstance(params.get("customer_message"), dict):
-            wanted.append("classify_customer_message")
+            if "classify_customer_message" not in wanted:
+                wanted.append("classify_customer_message")
         if "create_order_service_case" in self.tool_handlers and isinstance(params.get("order"), dict):
-            wanted.append("create_order_service_case")
+            if "create_order_service_case" not in wanted:
+                wanted.append("create_order_service_case")
+
+        # 3) Fallback keyword matching (safety net) when declaration gave nothing usable.
+        if not declared_tools:
+            def wants(tool, *terms):
+                if tool in self.tool_handlers and any(term in text for term in terms):
+                    if tool not in wanted:
+                        wanted.append(tool)
+            wants("check_inventory", "inventory", "stock", "low stock", "out of stock")
+            wants("get_inventory_alerts", "inventory alert", "stock alert", "low stock")
+            wants("get_shopify_products", "product", "catalog", "store", "shopify", "listing", "bundle")
+            wants("get_shopify_orders", "order", "customer", "fulfillment", "shipping", "service")
+            wants("watch_new_orders", "new order", "new orders", "order came in", "orders")
+            wants("watch_abandoned_carts", "abandoned", "cart", "checkout")
+            wants("search_cj_products", "supplier", "cj", "dropship", "source product")
+            wants("get_cj_product_details", "supplier product", "cj product", "product id")
+
         evidence={}
         seen=set()
         for tool in wanted:
@@ -273,7 +388,14 @@ Business context: {json.dumps(context.params,default=str)}
 Conversation with this agent:
 {json.dumps(context.conversation_history[-12:],default=str)}
 Respond naturally as the {self.name} agent. Do not return JSON, markdown data structures, status objects, tool metadata, or empty placeholders. Speak directly to the user like a real business specialist. Give concrete reasoning, findings, and next actions when the available evidence supports them. Be honest when required data is not available. Never claim an external action was completed unless the connected integration actually performed it."""
-        result=await call_llm(prompt,DEFAULT_MODEL,context.llm_keys,context.params.get("temperature"))
+        result=await agent_llm(self.name,prompt,DEFAULT_MODEL,context.llm_keys,
+                               mission_id=context.params.get("mission_id"),
+                               temperature=context.params.get("temperature"))
+        if _policy_denied(result):
+            reason=str(result.get("error") or "LLM request denied by policy.")
+            self.llm_blocked_reason=reason
+            logger.warning("Agent %s LLM request denied by policy: %s",self.name,reason)
+            return f"Blocked by policy: {reason} I did not run the LLM, so no work was performed."
         return (result.get("response") or "I am ready to help, but I do not have enough information to answer that yet.").strip()
 
     async def _llm_structured(self,context,instruction):
@@ -290,7 +412,14 @@ Tool evidence gathered for this run:
 Business context: {json.dumps(context.params,default=str)}
 Return concise JSON with keys: status, message, actions, handoff, evidence. The message must be a natural response from the agent, not JSON or tool metadata. Never return an empty message when the assigned duty can be performed from the supplied context.
 Never claim an external action was completed unless the connected integration actually performed it."""
-        result=await call_llm(prompt,DEFAULT_MODEL,context.llm_keys,context.params.get("temperature"))
+        result=await agent_llm(self.name,prompt,DEFAULT_MODEL,context.llm_keys,
+                               mission_id=context.params.get("mission_id"),
+                               temperature=context.params.get("temperature"))
+        if _policy_denied(result):
+            reason=str(result.get("error") or "LLM request denied by policy.")
+            self.llm_blocked_reason=reason
+            logger.warning("Agent %s LLM request denied by policy: %s",self.name,reason)
+            return {"status":"blocked","blocked":True,"error":reason,"message":f"Blocked by policy: {reason} I did not run the LLM, so no work was performed.","actions":[],"handoff":"","evidence":""}
         text=result.get("response","")
         try:
             match=re.search(r"\{.*\}",text,re.DOTALL)
@@ -349,9 +478,10 @@ class SmaugAgent(RoleAgent):
         result=await self._llm_role(context,instruction)
         tool_calls=[{"tool":"read_team_results","status":"completed","agents_available":list(team_results.keys())}]
         tool_calls += [{"tool":tool,"status":"failed" if isinstance(value,dict) and value.get("success") is False else "completed"} for tool,value in evidence.items()]
-        return {
+        blocked=self.llm_blocked_reason
+        payload={
             "agent": self.name,
-            "status": "completed",
+            "status": "blocked" if blocked else "completed",
             "message": result,
             "actions": [],
             "handoff": "",
@@ -359,6 +489,10 @@ class SmaugAgent(RoleAgent):
             "tool_evidence": evidence,
             "tool_calls": tool_calls
         }
+        if blocked:
+            payload["blocked"]=True
+            payload["error"]=blocked
+        return payload
 
 
 class AdImageAgent:
@@ -522,6 +656,9 @@ class Orchestrator:
     def get_agent(self,name): return self.agents.get(name.lower())
     def roster(self): return [a.summary() for a in self.agents.values()]
     async def team_execute(self,goal,context,cancel_event=None):
+        return await self._run_mission_team(goal, context, cancel_event)
+
+    async def _run_mission_team(self,goal,context,cancel_event=None):
         order=[name.lower() for name,_ in AGENT_ROLES]
         results={}
         completed=[]
@@ -535,9 +672,7 @@ class Orchestrator:
                          f"Perform your part of this task now. Use the results already produced by earlier agents as evidence. "
                          f"Return concrete findings, reasoning, actions, and handoff information relevant to your duty.")
             if name == "oracle":
-                instruction=(f"{goal}\n\nYou are the final Oracle synthesizer. Review ALL evidence produced by the other agents in context.results. "
-                             f"Identify the strongest-supported opportunities, explain the evidence from each relevant agent, "
-                             f"surface missing evidence/uncertainty, and provide explicit next actions. Do not invent data.")
+                continue
             try:
                 result=await agent.run(context,instruction)
             except asyncio.CancelledError:
@@ -546,30 +681,13 @@ class Orchestrator:
             completed.append(name)
             save_memory(context.email,f"agent_{name}_result",json.dumps(result,default=str))
         status="cancelled" if cancelled else "completed"
+        if not cancelled:
+            oracle = self.agents.get("oracle")
+            if oracle:
+                results["oracle"] = await oracle.run(context, f"{goal}\nReview ALL context.results and synthesize supported findings, uncertainty, and next actions. Do not invent data.")
+                context.results["oracle"] = results["oracle"]
         return {"status":status,"goal":goal,"agent_count":len(results),"results":results,"roster":self.roster(),
                 "completed_agents":completed,"cancelled":cancelled}
-    async def plan_and_execute(self,goal,context):
-        descriptions="\n".join(f"- {name}: {desc}" for name,desc in AGENT_ROLES)
-        prompt=f"""You are the VektorFlow 15XR orchestrator.
-Available agents:
-{descriptions}
-Goal: {goal}
-Shared context: {json.dumps(context.params,default=str)}
-Create JSON {{"tasks":[{{"agent":"name","instruction":"..."}}]}} using only the canonical 15 names."""
-        try:
-            response=await call_llm(prompt,DEFAULT_MODEL,context.llm_keys,context.params.get("temperature"))
-            text=response.get("response","{}"); match=re.search(r"\{.*\}",text,re.DOTALL)
-            plan=json.loads(match.group(0) if match else text)
-        except Exception:
-            return await self.team_execute(goal,context)
-        results={}
-        for task in plan.get("tasks",[]):
-            name=str(task.get("agent","")).lower(); agent=self.agents.get(name)
-            if not agent: continue
-            result=await agent.run(context,task.get("instruction",goal))
-            results[name]=result; context.results[name]=result
-            save_memory(context.email,f"agent_{name}_result",json.dumps(result,default=str))
-        return {"status":"completed","goal":goal,"plan":plan,"results":results,"agent_count":len(results)}
 
 _orchestrator=Orchestrator()
 def get_orchestrator(): return _orchestrator
@@ -578,9 +696,9 @@ async def run_agent_task(email,agent_name,command,params=None):
     context=AgentContext(email=email,user=get_user(email) or {},stores=get_user_stores(email) or [],
         llm_keys=get_llm_keys(email) or {},icp=get_icp_data(email) or {},memory=get_all_memory(email) or {},params=params or {})
     if agent_name.lower() in {"orchestrator","auto","autopilot","vektor"}:
-        return await _orchestrator.plan_and_execute(command,context)
+        return await _orchestrator.team_execute(command,context)
     agent=_orchestrator.get_agent(agent_name)
-    return await agent.run(context,command) if agent else await _orchestrator.plan_and_execute(command,context)
+    return await agent.run(context,command) if agent else await _orchestrator.team_execute(command,context)
 
 class Autopilot:
     def __init__(self): self.running=False; self.interval_seconds=3600

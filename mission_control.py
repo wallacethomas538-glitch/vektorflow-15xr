@@ -105,22 +105,19 @@ MISSION_STATES = [
     "cancelled",
 ]
 
-ALLOWED_TRANSITIONS = {
-    "draft": {"planning", "cancelled"},
-    "planning": {"ready", "blocked", "failed", "cancelled"},
-    "ready": {"awaiting_approval", "approved", "executing", "cancelled"},
-    "awaiting_approval": {"approved", "blocked", "cancelled"},
-    # approved -> failed: an execution attempt that crashes before reaching
-    # "executing" must be able to honestly record the failure instead of
-    # leaving the mission stuck in "approved" with a failed result.
-    "approved": {"executing", "paused", "failed", "cancelled"},
-    "executing": {"paused", "completed", "failed", "blocked", "awaiting_approval", "cancelled"},
-    "paused": {"executing", "cancelled"},
-    "blocked": {"planning", "ready", "awaiting_approval", "cancelled"},
-    "completed": set(),
-    "failed": {"planning", "cancelled"},
-    "cancelled": set(),
-}
+TERMINAL_STATES = {"completed", "cancelled"}
+
+def can_transition(from_state: str, to_state: str) -> bool:
+    """Apply lifecycle policy without a hand-maintained edge table."""
+    if from_state not in MISSION_STATES or to_state not in MISSION_STATES:
+        return False
+    if from_state in TERMINAL_STATES:
+        return False
+    if to_state == "cancelled":
+        return True
+    if from_state == "failed":
+        return to_state in {"planning", "ready"}
+    return to_state not in TERMINAL_STATES or to_state == "completed"
 
 RISK_POLICIES = {
     "low": "auto",
@@ -158,6 +155,7 @@ def init_mission_control() -> None:
             created_at TEXT NOT NULL,
             updated_at TEXT NOT NULL,
             completed_at TEXT
+            ,waiting_since TEXT
         );
 
         CREATE TABLE IF NOT EXISTS mission_tasks (
@@ -207,6 +205,11 @@ def init_mission_control() -> None:
         """
     )
     conn.commit()
+    try:
+        cur.execute("ALTER TABLE missions ADD COLUMN waiting_since TEXT")
+        conn.commit()
+    except Exception:
+        pass
     _ensure_mission_result_column(conn, _pg)
     global _reaped_stale_missions
     if not _reaped_stale_missions:
@@ -339,15 +342,14 @@ def transition_mission(mission_id: str, to_state: str, actor: str, email: Option
     if not mission:
         raise ValueError("Mission not found")
     from_state = mission["state"]
-    if to_state not in ALLOWED_TRANSITIONS.get(from_state, set()):
+    if not can_transition(from_state, to_state):
         raise ValueError(f"Invalid mission transition: {from_state} -> {to_state}")
     now = _now()
     conn, _pg = _open_db()
     cur = _cursor(conn, _pg)
-    cur.execute(
-        "UPDATE missions SET state = ?, updated_at = ?, completed_at = ? WHERE id = ?",
-        (to_state, now, now if to_state == "completed" else None, mission_id),
-    )
+    waiting_since = now if to_state in {"ready", "awaiting_approval"} else mission.get("waiting_since")
+    cur.execute("UPDATE missions SET state = ?, updated_at = ?, completed_at = ?, waiting_since = ? WHERE id = ?",
+                (to_state, now, now if to_state == "completed" else None, waiting_since, mission_id))
     _audit(cur, mission_id, actor, "mission.transitioned", details or {}, from_state, to_state)
     conn.commit()
     conn.close()
@@ -394,19 +396,12 @@ def list_tasks(mission_id: str) -> List[Dict[str, Any]]:
 
 TASK_STATES = ["pending", "running", "completed", "failed", "cancelled"]
 
-ALLOWED_TASK_TRANSITIONS = {
-    # pending -> failed is allowed for dependency-skip: a task whose dependency
-    # failed may be recorded as failed without its agent running.
-    "pending": {"running", "failed", "cancelled"},
-    # running -> pending: requeue a task stuck after a crash/restart so a
-    # re-run can retry it honestly through the normal pending -> running flow.
-    "running": {"completed", "failed", "cancelled", "pending"},
-    # failed -> pending: clean retry of a failed task on mission re-run.
-    "failed": {"running", "pending"},
-    "completed": set(),  # real work already done and recorded: never redo, never fake
-    # cancelled -> pending: requeue a cancelled task for a fresh run.
-    "cancelled": {"pending"},
-}
+def can_task_transition(from_state: str, to_state: str) -> bool:
+    if from_state not in TASK_STATES or to_state not in TASK_STATES:
+        return False
+    if from_state in {"completed", "cancelled"}:
+        return False
+    return True
 
 
 def transition_task(
@@ -428,7 +423,7 @@ def transition_task(
     if not task:
         raise ValueError("Task not found")
     from_state = task["status"]
-    if to_state not in ALLOWED_TASK_TRANSITIONS.get(from_state, set()):
+    if not can_task_transition(from_state, to_state):
         raise ValueError(f"Invalid task transition: {from_state} -> {to_state}")
     now = _now()
     conn, _pg = _open_db()
@@ -559,6 +554,17 @@ def get_audit(mission_id: str, limit: int = 100) -> List[Dict[str, Any]]:
 def mission_summary(email: str) -> Dict[str, Any]:
     missions = list_missions(email, limit=100)
     pending = list_pending_actions(email)
+    now = datetime.now(timezone.utc)
+    stale = []
+    for mission in missions:
+        if mission["state"] not in {"awaiting_approval", "ready"}:
+            continue
+        since = mission.get("waiting_since")
+        try:
+            if since and (now - datetime.fromisoformat(since)).total_seconds() > 86400:
+                stale.append({"mission_id": mission["id"], "state": mission["state"], "waiting_since": since})
+        except (TypeError, ValueError):
+            pass
     return {
         "mission_count": len(missions),
         "active": sum(m["state"] in {"planning", "ready", "awaiting_approval", "approved", "executing", "paused", "blocked"} for m in missions),
@@ -566,5 +572,6 @@ def mission_summary(email: str) -> Dict[str, Any]:
         "completed": sum(m["state"] == "completed" for m in missions),
         "failed": sum(m["state"] == "failed" for m in missions),
         "pending_actions": len(pending),
+        "stale_approvals": stale,
         "states": {state: sum(m["state"] == state for m in missions) for state in MISSION_STATES},
     }

@@ -7,6 +7,12 @@ from typing import Optional, List, Dict, Any
 import os, json, logging, asyncio
 from datetime import datetime
 
+# Meta Model API prep (hackathon): bridge META_* env into the LLM gateway
+# env BEFORE llm_handler reads its module-level gateway constants below.
+# No-op unless the META_* variables are set (credits key day).
+from src.meta_model import bridge_gateway_env as _bridge_meta_gateway_env
+_bridge_meta_gateway_env()
+
 from database import get_user, get_user_stores, get_llm_keys, get_icp_data, save_conversation, get_all_memory, save_store_token
 from vektor_agent import vektor_chat, detect_intent
 from llm_handler import call_llm, DEFAULT_MODEL
@@ -22,6 +28,7 @@ from inventory import check_inventory, get_inventory_alerts, get_reorder_recomme
 from campaign import generate_campaign
 from organic_content import generate_organic_content
 from mission_control_api import router as mission_control_router
+from src.meta_model import meta_status, get_meta_image_client, MetaNotConfigured, META_MODEL_SENTINELS
 import vektormind as vm
 from memory_api import router as memory_router
 from ai_observability import observability_status
@@ -681,13 +688,33 @@ async def api_info():
         "service":"VektorFlow 15xr","version":"1.1","status":"operational","agent_count":15,
         "agent_roster":[{"name":n,"description":d} for n,d in __import__("vektorflow_agents").AGENT_ROLES],
         "features":{"agent":"15-agent cooperative orchestrator","seo":"SEO optimization","store":"Store auto-connect","outreach":"Outreach generator","inventory":"Inventory monitoring","campaign":"Campaign generator","organic_content":"Organic content generator"},
-        "endpoints":{"login":"/commander/login","agent_chat":"/api/agent/chat","agent_command":"/api/agent/command","agents":"/api/agents","agent_detail":"/api/agents/{agent_name}","agent_chat":"/api/agents/{agent_name}/chat","team_run":"/api/agents/run","ai_chat":"/api/ai/chat","search_products":"/api/products/search","trends":"/api/trends","store_connect":"/api/store/connect","tasks":"/api/tasks","optimize_seo":"/optimize-seo","outreach":"/api/outreach/generate","inventory_check":"/api/inventory/check","inventory_alerts":"/api/inventory/alerts","inventory_reorder":"/api/inventory/reorder","campaign":"/api/campaign/generate","organic_content":"/api/content/organic"},
+        "endpoints":{"login":"/commander/login","agent_chat":"/api/agent/chat","agent_command":"/api/agent/command","agents":"/api/agents","agent_detail":"/api/agents/{agent_name}","agent_chat":"/api/agents/{agent_name}/chat","team_run":"/api/agents/run","ai_chat":"/api/ai/chat","search_products":"/api/products/search","trends":"/api/trends","store_connect":"/api/store/connect","tasks":"/api/tasks","optimize_seo":"/optimize-seo","outreach":"/api/outreach/generate","inventory_check":"/api/inventory/check","inventory_alerts":"/api/inventory/alerts","inventory_reorder":"/api/inventory/reorder","campaign":"/api/campaign/generate","organic_content":"/api/content/organic","meta_status":"/api/meta/status"},
         "timestamp":datetime.utcnow().isoformat()
     }
 
+@app.get("/api/meta/status")
+async def meta_model_status():
+    """Public, secret-free status of the Meta Model API integration
+    (Muse Spark chat + Muse Image), prepared for the hackathon."""
+    return meta_status()
+
 @app.post("/api/ads/generate-image")
 async def generate_ad_image(request_data: AdImageRequest):
-    """Generate advertisement imagery exclusively through the VektorFlow AdSpecialist."""
+    """Generate advertisement imagery through the VektorFlow AdSpecialist
+    (Pollinations), or through Muse Image when model="muse-image"."""
+    if (request_data.model or "").strip().lower() in META_MODEL_SENTINELS:
+        try:
+            return await get_meta_image_client().generate_image(
+                prompt=request_data.prompt,
+                size=request_data.size,
+            )
+        except MetaNotConfigured as exc:
+            raise HTTPException(status_code=503, detail=str(exc))
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc))
+        except RuntimeError as exc:
+            logger.error("Meta image generation failed: %s", exc)
+            raise HTTPException(status_code=502, detail=str(exc))
     try:
         return await get_ad_specialist().generate_image(
             prompt=request_data.prompt,

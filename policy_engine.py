@@ -62,6 +62,8 @@ def authorize_tool(agent: str, tool: str, *, mission_id: Optional[str]=None,
     return {"decision":"allow","allowed":True,"reason":"Tool is assigned to the agent and passed policy checks."}
 
 def authorize_model(agent: str, model: str, *, mission_id: Optional[str]=None) -> Dict[str, Any]:
+    if get_kill_switch().is_killed(agent):
+        return {"decision": "reject", "allowed": False, "reason": f"Kill switch is on for agent '{agent}'."}
     allowed = os.getenv("VF_ALLOWED_MODELS", "").strip()
     if allowed:
         models = {m.strip() for m in allowed.split(",") if m.strip()}

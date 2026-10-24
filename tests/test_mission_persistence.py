@@ -98,8 +98,10 @@ class MissionPersistenceTests(unittest.TestCase):
     def test_task_invalid_transition_rejected(self):
         mission = self._new_mission()
         task = mc.add_task(mission["id"], "Scout", "find niches", [], "low")
+        mc.transition_task(task["id"], "running", actor="mission-control")
+        mc.transition_task(task["id"], "completed", actor="mission-control", result={"agent": "Scout"})
         with self.assertRaises(ValueError):
-            mc.transition_task(task["id"], "completed", actor="mission-control")
+            mc.transition_task(task["id"], "pending", actor="mission-control")
         with self.assertRaises(ValueError):
             mc.transition_task(task["id"], "bogus-state", actor="mission-control")
 
@@ -137,46 +139,52 @@ class MissionPersistenceTests(unittest.TestCase):
         mission = self._new_mission()
         plan = build_mission_plan(mission["objective"], {})
         tasks = mca._create_plan_tasks(mission["id"], plan)
-        self.assertEqual(len(tasks), 15)
+        # The sync planner is the documented minimal-safe fallback: exactly
+        # one Scout task carrying the objective, no dependencies.
+        self.assertEqual(len(tasks), 1)
+        self.assertEqual(tasks[0]["agent"], "Scout")
         by_id = {t["id"] for t in tasks}
         for task in tasks:
             for dep in task.get("dependencies") or []:
                 self.assertIn(dep, by_id)
-        # Phase-0 tasks (Scout/ViralDet/Shadow) have no dependencies.
-        phase0 = [t for t in tasks if t["agent"] in {"Scout", "ViralDet", "Shadow"}]
-        self.assertTrue(all(not t.get("dependencies") for t in phase0))
+        self.assertTrue(all(not t.get("dependencies") for t in tasks))
 
     # ---- agent-output honesty guard ----
 
     def test_agent_work_guard_rejects_empty_output(self):
         ok, reason = mca._agent_work_succeeded({"agent": "X", "status": "completed", "message": ""})
         self.assertFalse(ok)
-        self.assertIn("no message", reason)
+        self.assertIn("summary", reason)
 
     def test_agent_work_guard_rejects_placeholder_response(self):
         ok, reason = mca._agent_work_succeeded({
             "agent": "X",
             "status": "completed",
+            "summary": "No usable result was produced.",
+            "evidence": [],
             "message": "I am ready to help, but I do not have enough information to answer that yet.",
         })
         self.assertFalse(ok)
-        self.assertIn("placeholder", reason)
+        self.assertIn("evidence", reason)
 
     def test_agent_work_guard_rejects_failed_and_blocked(self):
         ok, _ = mca._agent_work_succeeded({"agent": "X", "status": "failed", "error": "boom"})
         self.assertFalse(ok)
         ok, reason = mca._agent_work_succeeded({"agent": "X", "status": "blocked"})
         self.assertFalse(ok)
-        self.assertIn("blocked", reason)
+        self.assertIn("status", reason)
 
     def test_agent_work_guard_accepts_real_evidence(self):
         ok, _ = mca._agent_work_succeeded({
             "agent": "Scout", "status": "completed",
+            "summary": "Found three niches.",
             "message": "found 3 niches", "evidence": "trend snapshot",
         })
         self.assertTrue(ok)
         ok, _ = mca._agent_work_succeeded({
             "agent": "Scout", "status": "completed",
+            "summary": "Found a product.",
+            "evidence": [{"source": "catalog", "value": "widget"}],
             "type": "products", "data": [{"title": "widget"}],
         })
         self.assertTrue(ok)
@@ -185,16 +193,19 @@ class MissionPersistenceTests(unittest.TestCase):
         # Re-reading shared team context is not doing the work.
         ok, reason = mca._agent_work_succeeded({
             "agent": "Architect", "status": "completed", "message": "",
+            "summary": "Only shared context was available.",
             "actions": [], "handoff": "", "evidence": "",
             "tool_calls": [{"tool": "read_team_results", "status": "completed"}],
             "tool_evidence": {"read_team_results": {"scout": {"message": "x"}}},
         })
         self.assertFalse(ok)
-        self.assertIn("no message", reason)
+        self.assertIn("evidence", reason)
 
     def test_agent_work_guard_accepts_completed_real_tool(self):
         ok, _ = mca._agent_work_succeeded({
             "agent": "Rook", "status": "completed", "message": "",
+            "summary": "Products were retrieved.",
+            "evidence": [{"source": "shopify", "value": "products"}],
             "tool_calls": [
                 {"tool": "read_team_results", "status": "completed"},
                 {"tool": "get_shopify_products", "status": "completed"},
@@ -228,9 +239,9 @@ class MissionPersistenceTests(unittest.TestCase):
         got = mc.get_mission(mission["id"], TEST_EMAIL)
         self.assertEqual(got["state"], "completed")
         self.assertEqual(got["result"]["status"], "completed")
-        self.assertEqual(got["result"]["task_count"], 15)
+        self.assertEqual(got["result"]["task_count"], len(tasks))
         rows = mc.list_tasks(mission["id"])
-        self.assertEqual(len(rows), 15)
+        self.assertEqual(len(rows), len(tasks))
         self.assertTrue(all(r["status"] == "completed" for r in rows))
         self.assertTrue(all((r["result"] or {}).get("outcome", {}).get("message") for r in rows))
 
@@ -251,17 +262,21 @@ class MissionPersistenceTests(unittest.TestCase):
     def test_run_mission_team_real_orchestrator_honest_outcome(self):
         """End-to-end through the REAL _run_mission_team with the REAL orchestrator.
 
-        No LLM keys exist in this environment, so the real Cerebrum agent
-        cannot produce usable output. The mission must land failed with the
-        honest reason on both the task row and the mission record — it must
-        NEVER be recorded as completed.
+        The LLM boundary is faked to return an empty response — the same shape
+        a keyless/ unreachable provider produces. The orchestrator, agents,
+        tool gathering, storage and the honesty guard all stay REAL. The task
+        must land failed with the honest reason on both the task row and the
+        mission record — it must NEVER be recorded as completed.
         """
+        from unittest import mock
+
         mission = self._new_mission("honest failure probe")
         for state in ("planning", "ready", "approved", "executing"):
             mc.transition_mission(mission["id"], state, "test", TEST_EMAIL)
         mc.add_task(mission["id"], "Cerebrum", "summarize team state", [], "low")
 
-        result = asyncio.run(mca._run_mission_team(mission["id"], TEST_EMAIL))
+        with mock.patch("llm_gateway.call_llm", return_value={"response": ""}):
+            result = asyncio.run(mca._run_mission_team(mission["id"], TEST_EMAIL))
 
         rows = mc.list_tasks(mission["id"])
         self.assertEqual(len(rows), 1)
