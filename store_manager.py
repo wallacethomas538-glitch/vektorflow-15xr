@@ -213,9 +213,15 @@ class ShopifyAPI:
             )
             response.raise_for_status()
             data = response.json()
+            products = data.get("products", [])
+            # Trim bloat (especially body_html) to prevent LLM token limit failures
+            trimmed = [
+                {k: v for k, v in p.items() if k not in ("body_html", "description")}
+                for p in products
+            ]
             return {
                 "success": True,
-                "products": data.get("products", [])
+                "products": trimmed
             }
         except httpx.HTTPError as e:
             logger.error(f"Shopify get products error: {e}")
