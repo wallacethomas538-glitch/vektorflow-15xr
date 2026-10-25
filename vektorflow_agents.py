@@ -428,25 +428,6 @@ Never claim an external action was completed unless the connected integration ac
         except Exception: pass
         return {"status":"completed","message":text.strip(),"actions":[],"handoff":"","evidence":""}
 
-class ScoutAgent(BaseAgent):
-    def __init__(self):
-        super().__init__("Scout","Discovers products, niches, demand and trends.",
-            _tools("search_cj_products","get_cj_product_details","get_shopify_products","get_tiktok_trends","get_google_trends","brave_search","tavily_search","apify_actor"),
-            {"search_cj_products":search_cj_products,"get_cj_product_details":_cj_product_details,"get_shopify_products":_store_products,"get_tiktok_trends":_tiktok_trends,"get_google_trends":_google_trends,"brave_search":_brave_search,"tavily_search":_tavily_search,"apify_actor":_apify_actor})
-    async def _execute(self,context,instruction):
-        normalized = instruction.lower().strip()
-        # Direct conversation should go through the LLM. Tool-backed discovery
-        # remains available for explicit product/trend/search requests.
-        if any(term in normalized for term in ("trend", "trends", "tiktok")):
-            return {"agent":self.name,"type":"trends","data":(await get_tiktok_trends())[:10],"status":"completed"}
-        if any(term in normalized for term in ("search", "product", "products", "catalog", "supplier", "niche", "discover")):
-            keyword=instruction.replace("search","").replace("scout","").strip() or "best selling products"
-            products = await search_cj_products(keyword)
-            if not products:
-                return {"agent":self.name,"type":"products","keyword":keyword,"data":[],"status":"failed","error":"CJ product search returned no results or is not configured."}
-            return {"agent":self.name,"type":"products","keyword":keyword,"data":products[:10],"status":"completed"}
-        return await self._llm_role(context, instruction)
-
 class RoleAgent(BaseAgent):
     async def _execute(self,context,instruction):
         evidence=await self._gather_tool_evidence(context,instruction)
@@ -457,6 +438,13 @@ class RoleAgent(BaseAgent):
                 result["tool_evidence"]=evidence
                 result["tool_calls"]=[{"tool":tool,"status":"failed" if isinstance(value,dict) and value.get("success") is False else "completed"} for tool,value in evidence.items()]
         return result
+
+
+class ScoutAgent(RoleAgent):
+    def __init__(self):
+        super().__init__("Scout","Discovers products, niches, demand and trends.",
+            _tools("search_cj_products","get_cj_product_details","get_shopify_products","get_shopify_orders","get_tiktok_trends","get_google_trends","brave_search","tavily_search","apify_actor"),
+            {"search_cj_products":search_cj_products,"get_cj_product_details":_cj_product_details,"get_shopify_products":_store_products,"get_shopify_orders":_store_orders,"get_tiktok_trends":_tiktok_trends,"get_google_trends":_google_trends,"brave_search":_brave_search,"tavily_search":_tavily_search,"apify_actor":_apify_actor})
 
 
 def _read_team_results(context, agent_name=None):
